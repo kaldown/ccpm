@@ -62,12 +62,29 @@ pub fn render(frame: &mut Frame, app: &App) {
 fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let (enabled, total) = app.plugin_count();
 
+    // Get current working directory for display
+    let cwd_display = std::env::current_dir()
+        .map(|p| {
+            if let Some(home) = dirs::home_dir() {
+                if let Ok(rel) = p.strip_prefix(&home) {
+                    return format!("~/{}", rel.display());
+                }
+            }
+            p.display().to_string()
+        })
+        .unwrap_or_else(|_| "unknown".to_string());
+
     let title = vec![
         Span::styled(
             " CCPM ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("│ "),
+        Span::styled(
+            format!("CWD: {} ", cwd_display),
+            Style::default().fg(Color::DarkGray),
         ),
         Span::raw("│ "),
         Span::styled(

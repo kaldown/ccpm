@@ -57,6 +57,7 @@ pub type Result<T> = std::result::Result<T, PluginError>;
 pub enum Scope {
     #[default]
     User,
+    Project,
     Local,
 }
 
@@ -64,6 +65,7 @@ impl std::fmt::Display for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Scope::User => write!(f, "user"),
+            Scope::Project => write!(f, "project"),
             Scope::Local => write!(f, "local"),
         }
     }
@@ -87,11 +89,13 @@ pub struct Plugin {
     // Installation information
     pub install_scope: Scope, // Where installed (from installed_plugins.json entry.scope)
     pub install_path: Option<PathBuf>,
-    pub is_current_project: bool, // For local: is it THIS project?
+    pub project_path: Option<PathBuf>, // The project this was installed in (for project/local scopes)
+    pub is_current_project: bool,      // For project/local: is it THIS project?
 
     // Enabled status (tracked separately for each scope)
-    pub enabled_user: bool,  // Enabled in ~/.claude/settings.json
-    pub enabled_local: bool, // Enabled in ./.claude/settings.json
+    pub enabled_user: bool,    // Enabled in ~/.claude/settings.json
+    pub enabled_project: bool, // Enabled in ./.claude/settings.json (project scope)
+    pub enabled_local: bool,   // Enabled in ./.claude/settings.local.json
 
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,
@@ -103,30 +107,44 @@ impl Plugin {
     }
 
     /// Returns true if the plugin is effectively enabled in the current context
-    /// Local settings override user settings when present
+    /// Precedence: Local > Project > User
     pub fn is_enabled(&self) -> bool {
-        // If enabled in local scope, it's enabled
+        // Local overrides Project overrides User
         if self.enabled_local {
             return true;
         }
-        // If it's a local-only install and not enabled locally, check user
+        if self.enabled_project {
+            return true;
+        }
         self.enabled_user
     }
 
     /// Human-readable enabled context description
-    pub fn enabled_context(&self) -> &'static str {
-        match (self.enabled_user, self.enabled_local) {
-            (true, true) => "User + Local",
-            (true, false) => "User only",
-            (false, true) => "Local only",
-            (false, false) => "Disabled",
+    pub fn enabled_context(&self) -> String {
+        let mut contexts = Vec::new();
+        if self.enabled_user {
+            contexts.push("User");
+        }
+        if self.enabled_project {
+            contexts.push("Project");
+        }
+        if self.enabled_local {
+            contexts.push("Local");
+        }
+
+        if contexts.is_empty() {
+            "Disabled".to_string()
+        } else {
+            contexts.join(" + ")
         }
     }
 
-    /// Scope indicator for the list view: [U], [L], or [L*]
+    /// Scope indicator for the list view: [U], [P], [P*], [L], or [L*]
     pub fn scope_indicator(&self) -> &'static str {
         match (self.install_scope, self.is_current_project) {
             (Scope::User, _) => "[U]",
+            (Scope::Project, true) => "[P]",
+            (Scope::Project, false) => "[P*]", // Project but different directory
             (Scope::Local, true) => "[L]",
             (Scope::Local, false) => "[L*]", // Local but different project
         }
@@ -139,6 +157,18 @@ impl Plugin {
             "[-]"
         }
     }
+
+    /// Returns the project path formatted relative to home directory
+    pub fn project_path_display(&self) -> Option<String> {
+        self.project_path.as_ref().map(|p| {
+            if let Some(home) = dirs::home_dir() {
+                if let Ok(relative) = p.strip_prefix(&home) {
+                    return format!("~/{}", relative.display());
+                }
+            }
+            p.display().to_string()
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -146,6 +176,7 @@ pub enum ScopeFilter {
     #[default]
     All,
     User,
+    Project,
     Local,
 }
 
@@ -153,7 +184,8 @@ impl ScopeFilter {
     pub fn next(&self) -> Self {
         match self {
             ScopeFilter::All => ScopeFilter::User,
-            ScopeFilter::User => ScopeFilter::Local,
+            ScopeFilter::User => ScopeFilter::Project,
+            ScopeFilter::Project => ScopeFilter::Local,
             ScopeFilter::Local => ScopeFilter::All,
         }
     }
@@ -162,6 +194,7 @@ impl ScopeFilter {
         match self {
             ScopeFilter::All => "All",
             ScopeFilter::User => "User",
+            ScopeFilter::Project => "Project",
             ScopeFilter::Local => "Local",
         }
     }
@@ -174,6 +207,7 @@ mod tests {
     #[test]
     fn test_scope_display() {
         assert_eq!(Scope::User.to_string(), "user");
+        assert_eq!(Scope::Project.to_string(), "project");
         assert_eq!(Scope::Local.to_string(), "local");
     }
 
@@ -182,9 +216,8 @@ mod tests {
         assert_eq!(Scope::default(), Scope::User);
     }
 
-    #[test]
-    fn test_plugin_display_name() {
-        let plugin = Plugin {
+    fn make_test_plugin() -> Plugin {
+        Plugin {
             id: "test@marketplace".to_string(),
             name: "test".to_string(),
             marketplace: "marketplace".to_string(),
@@ -193,32 +226,27 @@ mod tests {
             author: None,
             install_scope: Scope::User,
             install_path: None,
+            project_path: None,
             is_current_project: true,
-            enabled_user: true,
+            enabled_user: false,
+            enabled_project: false,
             enabled_local: false,
             installed_at: None,
             last_updated: None,
-        };
+        }
+    }
+
+    #[test]
+    fn test_plugin_display_name() {
+        let mut plugin = make_test_plugin();
+        plugin.enabled_user = true;
         assert_eq!(plugin.display_name(), "test@marketplace");
     }
 
     #[test]
     fn test_plugin_status_indicator() {
-        let mut plugin = Plugin {
-            id: "test@marketplace".to_string(),
-            name: "test".to_string(),
-            marketplace: "marketplace".to_string(),
-            description: None,
-            version: None,
-            author: None,
-            install_scope: Scope::User,
-            install_path: None,
-            is_current_project: true,
-            enabled_user: true,
-            enabled_local: false,
-            installed_at: None,
-            last_updated: None,
-        };
+        let mut plugin = make_test_plugin();
+        plugin.enabled_user = true;
 
         assert_eq!(plugin.status_indicator(), "[+]");
         plugin.enabled_user = false;
@@ -227,92 +255,74 @@ mod tests {
 
     #[test]
     fn test_plugin_is_enabled() {
-        let mut plugin = Plugin {
-            id: "test@marketplace".to_string(),
-            name: "test".to_string(),
-            marketplace: "marketplace".to_string(),
-            description: None,
-            version: None,
-            author: None,
-            install_scope: Scope::User,
-            install_path: None,
-            is_current_project: true,
-            enabled_user: false,
-            enabled_local: false,
-            installed_at: None,
-            last_updated: None,
-        };
+        let mut plugin = make_test_plugin();
 
-        // Both disabled
+        // All disabled
         assert!(!plugin.is_enabled());
 
         // User enabled only
         plugin.enabled_user = true;
         assert!(plugin.is_enabled());
 
-        // Local enabled overrides
+        // Project enabled overrides user disabled
         plugin.enabled_user = false;
+        plugin.enabled_project = true;
+        assert!(plugin.is_enabled());
+
+        // Local enabled overrides all
+        plugin.enabled_project = false;
         plugin.enabled_local = true;
         assert!(plugin.is_enabled());
 
-        // Both enabled
+        // All enabled
         plugin.enabled_user = true;
+        plugin.enabled_project = true;
         assert!(plugin.is_enabled());
     }
 
     #[test]
     fn test_plugin_enabled_context() {
-        let mut plugin = Plugin {
-            id: "test@marketplace".to_string(),
-            name: "test".to_string(),
-            marketplace: "marketplace".to_string(),
-            description: None,
-            version: None,
-            author: None,
-            install_scope: Scope::User,
-            install_path: None,
-            is_current_project: true,
-            enabled_user: false,
-            enabled_local: false,
-            installed_at: None,
-            last_updated: None,
-        };
+        let mut plugin = make_test_plugin();
 
         assert_eq!(plugin.enabled_context(), "Disabled");
 
         plugin.enabled_user = true;
-        assert_eq!(plugin.enabled_context(), "User only");
+        assert_eq!(plugin.enabled_context(), "User");
+
+        plugin.enabled_project = true;
+        assert_eq!(plugin.enabled_context(), "User + Project");
 
         plugin.enabled_local = true;
-        assert_eq!(plugin.enabled_context(), "User + Local");
+        assert_eq!(plugin.enabled_context(), "User + Project + Local");
 
         plugin.enabled_user = false;
-        assert_eq!(plugin.enabled_context(), "Local only");
+        assert_eq!(plugin.enabled_context(), "Project + Local");
+
+        plugin.enabled_project = false;
+        assert_eq!(plugin.enabled_context(), "Local");
     }
 
     #[test]
     fn test_plugin_scope_indicator() {
-        let mut plugin = Plugin {
-            id: "test@marketplace".to_string(),
-            name: "test".to_string(),
-            marketplace: "marketplace".to_string(),
-            description: None,
-            version: None,
-            author: None,
-            install_scope: Scope::User,
-            install_path: None,
-            is_current_project: true,
-            enabled_user: false,
-            enabled_local: false,
-            installed_at: None,
-            last_updated: None,
-        };
+        let mut plugin = make_test_plugin();
 
+        // User scope
         assert_eq!(plugin.scope_indicator(), "[U]");
 
+        // Project scope - current project
+        plugin.install_scope = Scope::Project;
+        assert_eq!(plugin.scope_indicator(), "[P]");
+
+        // Project scope - different project
+        plugin.is_current_project = false;
+        assert_eq!(plugin.scope_indicator(), "[P*]");
+
+        // Local scope - current project
         plugin.install_scope = Scope::Local;
+        plugin.is_current_project = true;
         assert_eq!(plugin.scope_indicator(), "[L]");
 
+        // Local scope - different project
         plugin.is_current_project = false;
         assert_eq!(plugin.scope_indicator(), "[L*]");
     }
@@ -320,7 +330,8 @@ mod tests {
     #[test]
     fn test_scope_filter_next() {
         assert_eq!(ScopeFilter::All.next(), ScopeFilter::User);
-        assert_eq!(ScopeFilter::User.next(), ScopeFilter::Local);
+        assert_eq!(ScopeFilter::User.next(), ScopeFilter::Project);
+        assert_eq!(ScopeFilter::Project.next(), ScopeFilter::Local);
         assert_eq!(ScopeFilter::Local.next(), ScopeFilter::All);
     }
 
@@ -328,6 +339,7 @@ mod tests {
     fn test_scope_filter_label() {
         assert_eq!(ScopeFilter::All.label(), "All");
         assert_eq!(ScopeFilter::User.label(), "User");
+        assert_eq!(ScopeFilter::Project.label(), "Project");
         assert_eq!(ScopeFilter::Local.label(), "Local");
     }
 
@@ -346,5 +358,29 @@ mod tests {
 
         let err = PluginError::HomeDirNotFound;
         assert_eq!(err.to_string(), "Home directory not found");
+    }
+
+    #[test]
+    fn test_project_path_display() {
+        let mut plugin = make_test_plugin();
+
+        // No project path
+        assert_eq!(plugin.project_path_display(), None);
+
+        // With project path (non-home path)
+        plugin.project_path = Some(PathBuf::from("/some/absolute/path"));
+        assert_eq!(
+            plugin.project_path_display(),
+            Some("/some/absolute/path".to_string())
+        );
+
+        // With home-relative path (if we can get home dir)
+        if let Some(home) = dirs::home_dir() {
+            plugin.project_path = Some(home.join("projects/myapp"));
+            assert_eq!(
+                plugin.project_path_display(),
+                Some("~/projects/myapp".to_string())
+            );
+        }
     }
 }

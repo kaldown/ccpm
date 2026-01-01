@@ -53,14 +53,21 @@ src/
 
 ### Key Concepts
 
-**Dual Scope System**: Plugins can be installed and enabled at two scopes:
-- **User scope**: `~/.claude/settings.json` - applies globally
-- **Local scope**: `./.claude/settings.json` - applies to current project only
+**Three-Scope System**: Plugins can be installed and enabled at three scopes:
+
+| Scope   | Settings File                   | installed_plugins.json fields        | Purpose                    |
+|---------|---------------------------------|--------------------------------------|----------------------------|
+| User    | `~/.claude/settings.json`       | `scope: "user"`                      | Global, all projects       |
+| Project | `./.claude/settings.json`       | `scope: "project"`, `projectPath`    | Team-shared, in git        |
+| Local   | `./.claude/settings.local.json` | `scope: "local"`, `projectPath`      | Personal, gitignored       |
+
+Settings precedence: Local > Project > User
 
 **Plugin Discovery** (`plugin/discovery.rs`):
 - Reads `~/.claude/plugins/installed_plugins.json` for installation data
-- Reads settings from both scopes to determine enabled status
-- Merges into `Plugin` structs with `enabled_user` and `enabled_local` fields
+- Reads settings from all THREE scopes to determine enabled status
+- Uses `projectPath` field to determine `is_current_project` for project/local scopes
+- Merges into `Plugin` structs with `enabled_user`, `enabled_project`, and `enabled_local` fields
 
 **Atomic Operations** (`plugin/operations.rs`):
 - Uses `fs2` file locking for concurrent safety
@@ -71,13 +78,19 @@ src/
 - `Search`: incremental filtering
 - `Help`, `Confirm`, `DetailModal`: overlay states
 
+**UI Features**:
+- CWD displayed in header (format: `~/relative/path`)
+- Scope indicators: `[U]`, `[P]`, `[P*]`, `[L]`, `[L*]`
+- Project path shown for all project/local scope plugins
+
 ### Config Files Read
 
 | File | Purpose |
 |------|---------|
 | `~/.claude/settings.json` | User-scope enabled plugins |
-| `./.claude/settings.json` | Local-scope enabled plugins |
-| `~/.claude/plugins/installed_plugins.json` | Installation metadata |
+| `./.claude/settings.json` | Project-scope enabled plugins (team-shared) |
+| `./.claude/settings.local.json` | Local-scope enabled plugins (personal) |
+| `~/.claude/plugins/installed_plugins.json` | Installation metadata (includes `projectPath`) |
 | `~/.claude/plugins/known_marketplaces.json` | Marketplace sources |
 | `<install_path>/.claude-plugin/plugin.json` | Plugin manifest |
 

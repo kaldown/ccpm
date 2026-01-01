@@ -72,6 +72,7 @@ impl PluginService {
     fn set_plugin_enabled(&self, id: &str, scope: Scope, enabled: bool) -> Result<()> {
         let path = match scope {
             Scope::User => self.paths.user_settings(),
+            Scope::Project => self.paths.project_settings(),
             Scope::Local => self.paths.local_settings(),
         };
 

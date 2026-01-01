@@ -34,6 +34,8 @@ impl Default for InstalledPlugins {
 pub struct InstalledPluginEntry {
     pub scope: String,
     pub install_path: PathBuf,
+    #[serde(default)]
+    pub project_path: Option<PathBuf>, // For project/local scopes - the project directory
     pub version: String,
     pub installed_at: String,
     pub last_updated: String,
@@ -117,8 +119,14 @@ impl ConfigPaths {
         self.user_dir.join("settings.json")
     }
 
-    pub fn local_settings(&self) -> PathBuf {
+    /// Project-scope settings (./.claude/settings.json) - shared in git
+    pub fn project_settings(&self) -> PathBuf {
         self.local_dir.join("settings.json")
+    }
+
+    /// Local-scope settings (./.claude/settings.local.json) - gitignored
+    pub fn local_settings(&self) -> PathBuf {
+        self.local_dir.join("settings.local.json")
     }
 
     pub fn installed_plugins(&self) -> PathBuf {
@@ -193,7 +201,8 @@ mod tests {
     fn test_config_paths() {
         let paths = ConfigPaths::new().unwrap();
         assert!(paths.user_settings().ends_with("settings.json"));
-        assert!(paths.local_settings().ends_with("settings.json"));
+        assert!(paths.project_settings().ends_with("settings.json"));
+        assert!(paths.local_settings().ends_with("settings.local.json"));
         assert!(paths
             .installed_plugins()
             .to_string_lossy()

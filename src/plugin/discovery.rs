@@ -22,22 +22,27 @@ impl PluginDiscovery {
         Self { paths }
     }
 
-    /// Discover all plugins from both user and local scopes
+    /// Discover all plugins from user, project, and local scopes
     pub fn discover_all(&self) -> Result<Vec<Plugin>> {
         let mut plugins = Vec::new();
 
-        // Load configuration files
+        // Load configuration files from all THREE scopes
         let user_settings = self.load_settings(&self.paths.user_settings());
+        let project_settings = self.load_settings(&self.paths.project_settings());
         let local_settings = self.load_settings(&self.paths.local_settings());
         let installed = self.load_installed_plugins();
         let _marketplaces = self.load_known_marketplaces();
 
-        // Track enabled status from BOTH scopes separately
+        // Track enabled status from ALL scopes separately
         let mut user_enabled: HashMap<String, bool> = HashMap::new();
+        let mut project_enabled: HashMap<String, bool> = HashMap::new();
         let mut local_enabled: HashMap<String, bool> = HashMap::new();
 
         for (id, enabled) in &user_settings.enabled_plugins {
             user_enabled.insert(id.clone(), *enabled);
+        }
+        for (id, enabled) in &project_settings.enabled_plugins {
+            project_enabled.insert(id.clone(), *enabled);
         }
         for (id, enabled) in &local_settings.enabled_plugins {
             local_enabled.insert(id.clone(), *enabled);
@@ -51,15 +56,27 @@ impl PluginDiscovery {
 
                 // Determine installation scope from entry.scope (source of truth)
                 let install_scope = match entry.scope.as_str() {
+                    "project" => Scope::Project,
                     "local" => Scope::Local,
                     _ => Scope::User,
                 };
 
-                // For local installs, check if it's the current project
-                let is_current_project = if install_scope == Scope::Local {
-                    self.is_local_install_current_project(&entry.install_path)
-                } else {
-                    true // User scope is always "current"
+                // For project/local installs, check if it's the current project
+                let is_current_project = match install_scope {
+                    Scope::User => true, // User scope is always "current"
+                    Scope::Project | Scope::Local => {
+                        // Check projectPath field if available (preferred)
+                        if let Some(ref project_path) = entry.project_path {
+                            if let Ok(cwd) = env::current_dir() {
+                                project_path == &cwd
+                            } else {
+                                false
+                            }
+                        } else {
+                            // Fallback to old behavior if no projectPath
+                            self.is_local_install_current_project(&entry.install_path)
+                        }
+                    }
                 };
 
                 plugins.push(Plugin {
@@ -79,8 +96,10 @@ impl PluginDiscovery {
                     }),
                     install_scope,
                     install_path: Some(entry.install_path.clone()),
+                    project_path: entry.project_path.clone(),
                     is_current_project,
                     enabled_user: user_enabled.get(id).copied().unwrap_or(false),
+                    enabled_project: project_enabled.get(id).copied().unwrap_or(false),
                     enabled_local: local_enabled.get(id).copied().unwrap_or(false),
                     installed_at: Some(entry.installed_at.clone()),
                     last_updated: Some(entry.last_updated.clone()),
@@ -89,8 +108,11 @@ impl PluginDiscovery {
         }
 
         // Also include plugins that are in settings but not installed
-        let all_ids: std::collections::HashSet<_> =
-            user_enabled.keys().chain(local_enabled.keys()).collect();
+        let all_ids: std::collections::HashSet<_> = user_enabled
+            .keys()
+            .chain(project_enabled.keys())
+            .chain(local_enabled.keys())
+            .collect();
 
         for id in all_ids {
             if !installed.plugins.contains_key(id) {
@@ -104,8 +126,10 @@ impl PluginDiscovery {
                     author: None,
                     install_scope: Scope::User, // Not installed, default to user
                     install_path: None,
+                    project_path: None,
                     is_current_project: true,
                     enabled_user: user_enabled.get(id).copied().unwrap_or(false),
+                    enabled_project: project_enabled.get(id).copied().unwrap_or(false),
                     enabled_local: local_enabled.get(id).copied().unwrap_or(false),
                     installed_at: None,
                     last_updated: None,

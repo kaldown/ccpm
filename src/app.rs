@@ -143,6 +143,7 @@ impl App {
                 let scope_match = match self.scope_filter {
                     ScopeFilter::All => true,
                     ScopeFilter::User => p.install_scope == Scope::User,
+                    ScopeFilter::Project => p.install_scope == Scope::Project,
                     ScopeFilter::Local => p.install_scope == Scope::Local,
                 };
 
@@ -177,6 +178,7 @@ impl App {
                         // Update the appropriate enabled field based on scope
                         match scope {
                             Scope::User => p.enabled_user = new_state,
+                            Scope::Project => p.enabled_project = new_state,
                             Scope::Local => p.enabled_local = new_state,
                         }
                     }
@@ -209,6 +211,7 @@ impl App {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
                         match scope {
                             Scope::User => p.enabled_user = true,
+                            Scope::Project => p.enabled_project = true,
                             Scope::Local => p.enabled_local = true,
                         }
                     }
@@ -236,6 +239,7 @@ impl App {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
                         match scope {
                             Scope::User => p.enabled_user = false,
+                            Scope::Project => p.enabled_project = false,
                             Scope::Local => p.enabled_local = false,
                         }
                     }

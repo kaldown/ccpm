@@ -60,6 +60,7 @@ pub enum Commands {
 pub enum ScopeArg {
     All,
     User,
+    Project,
     Local,
 }
 
@@ -68,6 +69,7 @@ impl From<ScopeArg> for ScopeFilter {
         match arg {
             ScopeArg::All => ScopeFilter::All,
             ScopeArg::User => ScopeFilter::User,
+            ScopeArg::Project => ScopeFilter::Project,
             ScopeArg::Local => ScopeFilter::Local,
         }
     }
@@ -77,6 +79,7 @@ impl From<ScopeArg> for Scope {
     fn from(arg: ScopeArg) -> Self {
         match arg {
             ScopeArg::All | ScopeArg::User => Scope::User,
+            ScopeArg::Project => Scope::Project,
             ScopeArg::Local => Scope::Local,
         }
     }
@@ -104,6 +107,7 @@ fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bo
         .filter(|p| match scope_filter {
             ScopeFilter::All => true,
             ScopeFilter::User => p.install_scope == Scope::User,
+            ScopeFilter::Project => p.install_scope == Scope::Project,
             ScopeFilter::Local => p.install_scope == Scope::Local,
         })
         .filter(|p| {
@@ -136,6 +140,8 @@ fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bo
         };
         let installed = match (plugin.install_scope, plugin.is_current_project) {
             (Scope::User, _) => "user",
+            (Scope::Project, true) => "project",
+            (Scope::Project, false) => "project*",
             (Scope::Local, true) => "local",
             (Scope::Local, false) => "local*",
         };
@@ -188,15 +194,18 @@ fn show_info(plugin_id: &str) -> Result<()> {
 
             let installed = match (p.install_scope, p.is_current_project) {
                 (Scope::User, _) => "User (~/.claude)".to_string(),
+                (Scope::Project, true) => "Project (this project)".to_string(),
+                (Scope::Project, false) => "Project (other project)".to_string(),
                 (Scope::Local, true) => "Local (this project)".to_string(),
                 (Scope::Local, false) => "Local (other project)".to_string(),
             };
             println!("Installed:   {}", installed);
             println!("Enabled in:  {}", p.enabled_context());
 
-            if p.install_scope == Scope::Local && !p.is_current_project {
-                if let Some(ref path) = p.install_path {
-                    println!("Project:     {}", path.display());
+            // Show project path for project/local scope plugins
+            if p.install_scope != Scope::User {
+                if let Some(path_display) = p.project_path_display() {
+                    println!("Project:     {}", path_display);
                 }
             }
 

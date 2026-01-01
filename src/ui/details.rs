@@ -34,6 +34,8 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
         // Installation scope (where it's installed)
         let install_location = match (plugin.install_scope, plugin.is_current_project) {
             (crate::plugin::Scope::User, _) => "User (~/.claude)".to_string(),
+            (crate::plugin::Scope::Project, true) => "Project (this project)".to_string(),
+            (crate::plugin::Scope::Project, false) => "Project (other project)".to_string(),
             (crate::plugin::Scope::Local, true) => "Local (this project)".to_string(),
             (crate::plugin::Scope::Local, false) => "Local (other project)".to_string(),
         };
@@ -51,14 +53,18 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
             Span::raw(plugin.enabled_context()),
         ]));
 
-        // Show project path for non-current-project local installs
-        if plugin.install_scope == crate::plugin::Scope::Local && !plugin.is_current_project {
-            if let Some(ref path) = plugin.install_path {
+        // Always show project path for project/local scopes (using relative-to-home format)
+        if plugin.install_scope != crate::plugin::Scope::User {
+            if let Some(path_display) = plugin.project_path_display() {
                 lines.push(Line::from(vec![
                     Span::styled("Project: ", Style::default().add_modifier(Modifier::BOLD)),
                     Span::styled(
-                        path.display().to_string(),
-                        Style::default().fg(Color::Yellow),
+                        path_display,
+                        if plugin.is_current_project {
+                            Style::default().fg(Color::Green)
+                        } else {
+                            Style::default().fg(Color::Yellow)
+                        },
                     ),
                 ]));
             }

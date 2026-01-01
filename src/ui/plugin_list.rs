@@ -15,11 +15,13 @@ pub fn render_plugin_list(frame: &mut Frame, app: &App, area: Rect) {
         .map(|&idx| {
             let plugin = &app.plugins[idx];
 
-            // Scope indicator: [U], [L], or [L*] for local in other project
+            // Scope indicator: [U], [P], [P*], [L], or [L*] for different project
             let scope_indicator = Span::styled(
                 plugin.scope_indicator(),
                 match (plugin.install_scope, plugin.is_current_project) {
                     (Scope::User, _) => Style::default().fg(Color::Blue),
+                    (Scope::Project, true) => Style::default().fg(Color::Cyan),
+                    (Scope::Project, false) => Style::default().fg(Color::Yellow), // Different project
                     (Scope::Local, true) => Style::default().fg(Color::Magenta),
                     (Scope::Local, false) => Style::default().fg(Color::Yellow), // Different project
                 },
