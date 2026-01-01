@@ -54,15 +54,30 @@ ccpm
 | `k` / `↑` | Move up |
 | `g` | Go to first |
 | `G` | Go to last |
+| `Enter` | View plugin details (modal) |
+| `Space` | Toggle enable/disable |
 | `e` | Enable plugin |
 | `d` | Disable plugin |
-| `Space` / `Enter` | Toggle enable/disable |
 | `s` | Cycle scope filter (All/User/Local) |
 | `/` | Start search |
 | `Esc` | Clear search / Exit mode |
 | `?` | Toggle help |
 | `r` | Reload plugins |
 | `q` | Quit |
+
+### Scope Indicators
+
+In the plugin list, each plugin shows a scope indicator:
+
+| Indicator | Meaning |
+|-----------|---------|
+| `[U]` (blue) | User scope - installed in `~/.claude` |
+| `[L]` (magenta) | Local scope - installed in current project |
+| `[L*]` (yellow) | Local scope - installed in a different project |
+
+The detail panel shows:
+- **Installed**: Where the plugin files are physically located
+- **Enabled in**: Which settings files have the plugin enabled (User only, Local only, User + Local, or Disabled)
 
 ### CLI Mode
 
@@ -71,6 +86,15 @@ List all plugins:
 ccpm list
 ccpm list --scope user
 ccpm list --enabled
+```
+
+Example output:
+```
+NAME                           MARKETPLACE               STATUS   INSTALLED  ENABLED IN
+------------------------------------------------------------------------------------------
+context7                       claude-plugins-official   enabled  user       User only
+agent-orchestration            claude-code-workflows     enabled  local      Local only
+my-custom-plugin               local-dev                 disabled local*     Disabled
 ```
 
 Enable/disable plugins:
@@ -82,6 +106,18 @@ ccpm disable plugin-name@marketplace --scope local
 Show plugin details:
 ```bash
 ccpm info plugin-name@marketplace
+```
+
+Example output:
+```
+Name:        context7
+Marketplace: claude-plugins-official
+ID:          context7@claude-plugins-official
+Status:      enabled
+Installed:   User (~/.claude)
+Enabled in:  User only
+Version:     1.0.0
+Path:        /Users/you/.claude/plugins/marketplaces/claude-plugins-official/context7
 ```
 
 ## Configuration

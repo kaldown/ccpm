@@ -1,37 +1,44 @@
 use crate::app::App;
 use ratatui::{
-    layout::Rect,
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
-pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_detail_modal(frame: &mut Frame, app: &App, area: Rect) {
+    let modal_area = centered_rect(75, 80, area);
+
+    // Clear the background
+    frame.render_widget(Clear, modal_area);
+
     let content = if let Some(plugin) = app.selected_plugin() {
         let mut lines = vec![
-            Line::from(vec![
-                Span::styled("Name: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(&plugin.name),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "Marketplace: ",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(&plugin.marketplace),
-            ]),
-            Line::from(vec![
-                Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
-                if plugin.is_enabled() {
-                    Span::styled("Enabled", Style::default().fg(Color::Green))
-                } else {
-                    Span::styled("Disabled", Style::default().fg(Color::Red))
-                },
-            ]),
+            Line::from(Span::styled(
+                &plugin.name,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                format!("@{}", plugin.marketplace),
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
         ];
 
-        // Installation scope (where it's installed)
+        // Status section
+        lines.push(Line::from(vec![
+            Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
+            if plugin.is_enabled() {
+                Span::styled("Enabled", Style::default().fg(Color::Green))
+            } else {
+                Span::styled("Disabled", Style::default().fg(Color::Red))
+            },
+        ]));
+
+        // Installation scope
         let install_location = match (plugin.install_scope, plugin.is_current_project) {
             (crate::plugin::Scope::User, _) => "User (~/.claude)".to_string(),
             (crate::plugin::Scope::Local, true) => "Local (this project)".to_string(),
@@ -42,7 +49,7 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
             Span::raw(install_location),
         ]));
 
-        // Enabled context (where it's enabled)
+        // Enabled context
         lines.push(Line::from(vec![
             Span::styled(
                 "Enabled in: ",
@@ -64,6 +71,9 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
             }
         }
 
+        lines.push(Line::from(""));
+
+        // Version and Author
         if let Some(ref version) = plugin.version {
             lines.push(Line::from(vec![
                 Span::styled("Version: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -83,6 +93,7 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
             ]));
         }
 
+        // Installation path
         if let Some(ref path) = plugin.install_path {
             lines.push(Line::from(vec![
                 Span::styled("Path: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -90,6 +101,14 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
                     path.display().to_string(),
                     Style::default().fg(Color::DarkGray),
                 ),
+            ]));
+        }
+
+        // Timestamps
+        if let Some(ref date) = plugin.installed_at {
+            lines.push(Line::from(vec![
+                Span::styled("Installed: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(date),
             ]));
         }
 
@@ -103,12 +122,20 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
         // Description section
         lines.push(Line::from(""));
         if let Some(ref description) = plugin.description {
-            lines.push(Line::from(vec![Span::styled(
+            lines.push(Line::from(Span::styled(
                 "Description:",
                 Style::default().add_modifier(Modifier::BOLD),
-            )]));
+            )));
+            lines.push(Line::from(""));
             lines.push(Line::from(Span::raw(description)));
         }
+
+        // Footer with controls
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Press Esc or Enter to close | Space to toggle",
+            Style::default().fg(Color::DarkGray),
+        )));
 
         lines
     } else {
@@ -118,14 +145,31 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
         ))]
     };
 
-    let details = Paragraph::new(content)
+    let modal = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Details ")
+                .title(" Plugin Details ")
+                .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
         )
         .wrap(Wrap { trim: true });
 
-    frame.render_widget(details, area);
+    frame.render_widget(modal, modal_area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }

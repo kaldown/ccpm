@@ -103,14 +103,14 @@ fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bo
         .iter()
         .filter(|p| match scope_filter {
             ScopeFilter::All => true,
-            ScopeFilter::User => p.scope == Scope::User,
-            ScopeFilter::Local => p.scope == Scope::Local,
+            ScopeFilter::User => p.install_scope == Scope::User,
+            ScopeFilter::Local => p.install_scope == Scope::Local,
         })
         .filter(|p| {
             if only_enabled {
-                p.enabled
+                p.is_enabled()
             } else if only_disabled {
-                !p.enabled
+                !p.is_enabled()
             } else {
                 true
             }
@@ -123,23 +123,29 @@ fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bo
     }
 
     println!(
-        "{:<30} {:<25} {:<8} {:<6}",
-        "NAME", "MARKETPLACE", "STATUS", "SCOPE"
+        "{:<30} {:<25} {:<8} {:<10} {:<12}",
+        "NAME", "MARKETPLACE", "STATUS", "INSTALLED", "ENABLED IN"
     );
-    println!("{}", "-".repeat(75));
+    println!("{}", "-".repeat(90));
 
     for plugin in filtered {
-        let status = if plugin.enabled {
+        let status = if plugin.is_enabled() {
             "enabled"
         } else {
             "disabled"
         };
+        let installed = match (plugin.install_scope, plugin.is_current_project) {
+            (Scope::User, _) => "user",
+            (Scope::Local, true) => "local",
+            (Scope::Local, false) => "local*",
+        };
         println!(
-            "{:<30} {:<25} {:<8} {:<6}",
+            "{:<30} {:<25} {:<8} {:<10} {:<12}",
             plugin.name,
             plugin.marketplace,
             status,
-            plugin.scope.to_string()
+            installed,
+            plugin.enabled_context()
         );
     }
 
@@ -173,9 +179,26 @@ fn show_info(plugin_id: &str) -> Result<()> {
             println!("ID:          {}", p.id);
             println!(
                 "Status:      {}",
-                if p.enabled { "enabled" } else { "disabled" }
+                if p.is_enabled() {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
             );
-            println!("Scope:       {}", p.scope);
+
+            let installed = match (p.install_scope, p.is_current_project) {
+                (Scope::User, _) => "User (~/.claude)".to_string(),
+                (Scope::Local, true) => "Local (this project)".to_string(),
+                (Scope::Local, false) => "Local (other project)".to_string(),
+            };
+            println!("Installed:   {}", installed);
+            println!("Enabled in:  {}", p.enabled_context());
+
+            if p.install_scope == Scope::Local && !p.is_current_project {
+                if let Some(ref path) = p.install_path {
+                    println!("Project:     {}", path.display());
+                }
+            }
 
             if let Some(ref version) = p.version {
                 println!("Version:     {}", version);

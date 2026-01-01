@@ -67,6 +67,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> 
                 AppMode::Search => handle_search_mode(app, key.code),
                 AppMode::Help => handle_help_mode(app, key.code),
                 AppMode::Confirm(_) => handle_confirm_mode(app, key.code),
+                AppMode::DetailModal => handle_detail_modal_mode(app, key.code),
             }
         }
 
@@ -87,7 +88,8 @@ fn handle_normal_mode(app: &mut App, key: KeyCode) {
         // Plugin actions
         KeyCode::Char('e') => app.enable_selected_plugin(),
         KeyCode::Char('d') => app.disable_selected_plugin(),
-        KeyCode::Char(' ') | KeyCode::Enter => app.toggle_selected_plugin(),
+        KeyCode::Char(' ') => app.toggle_selected_plugin(),
+        KeyCode::Enter => app.show_detail_modal(),
         KeyCode::Char('x') => app.confirm_remove(),
 
         // Filtering
@@ -135,6 +137,17 @@ fn handle_confirm_mode(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Char('y') | KeyCode::Enter => app.execute_confirm(),
         KeyCode::Char('n') | KeyCode::Esc => app.cancel_confirm(),
+        _ => {}
+    }
+}
+
+fn handle_detail_modal_mode(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => app.hide_detail_modal(),
+        // Allow toggle from modal
+        KeyCode::Char(' ') => app.toggle_selected_plugin(),
+        KeyCode::Char('e') => app.enable_selected_plugin(),
+        KeyCode::Char('d') => app.disable_selected_plugin(),
         _ => {}
     }
 }

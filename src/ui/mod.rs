@@ -1,8 +1,10 @@
+mod detail_modal;
 mod details;
 mod dialogs;
 mod help;
 mod plugin_list;
 
+pub use detail_modal::render_detail_modal;
 pub use details::render_details;
 pub use dialogs::render_confirm_dialog;
 pub use help::render_help;
@@ -52,6 +54,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     match app.mode {
         AppMode::Help => render_help(frame, area),
         AppMode::Confirm(action) => render_confirm_dialog(frame, app, action, area),
+        AppMode::DetailModal => render_detail_modal(frame, app, area),
         _ => {}
     }
 }
@@ -107,6 +110,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let commands = match app.mode {
         AppMode::Normal => vec![
             ("j/k", "navigate"),
+            ("Enter", "details"),
             ("e", "enable"),
             ("d", "disable"),
             ("s", "scope"),
@@ -117,6 +121,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Search => vec![("Enter/Esc", "exit search"), ("Type", "filter")],
         AppMode::Help => vec![("Esc/?", "close help")],
         AppMode::Confirm(_) => vec![("y", "confirm"), ("n/Esc", "cancel")],
+        AppMode::DetailModal => vec![("Esc/Enter", "close"), ("Space", "toggle")],
     };
 
     let mut spans: Vec<Span> = Vec::new();

@@ -34,8 +34,8 @@ impl PluginService {
 
     /// Toggle plugin enabled state
     pub fn toggle_plugin(&self, plugin: &Plugin) -> Result<bool> {
-        let new_state = !plugin.enabled;
-        self.set_plugin_enabled(&plugin.id, plugin.scope, new_state)?;
+        let new_state = !plugin.is_enabled();
+        self.set_plugin_enabled(&plugin.id, plugin.install_scope, new_state)?;
         Ok(new_state)
     }
 

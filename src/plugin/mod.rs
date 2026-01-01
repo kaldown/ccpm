@@ -83,9 +83,16 @@ pub struct Plugin {
     pub description: Option<String>,
     pub version: Option<String>,
     pub author: Option<Author>,
-    pub enabled: bool,
-    pub scope: Scope,
+
+    // Installation information
+    pub install_scope: Scope, // Where installed (from installed_plugins.json entry.scope)
     pub install_path: Option<PathBuf>,
+    pub is_current_project: bool, // For local: is it THIS project?
+
+    // Enabled status (tracked separately for each scope)
+    pub enabled_user: bool,  // Enabled in ~/.claude/settings.json
+    pub enabled_local: bool, // Enabled in ./.claude/settings.json
+
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,
 }
@@ -95,8 +102,38 @@ impl Plugin {
         format!("{}@{}", self.name, self.marketplace)
     }
 
+    /// Returns true if the plugin is effectively enabled in the current context
+    /// Local settings override user settings when present
+    pub fn is_enabled(&self) -> bool {
+        // If enabled in local scope, it's enabled
+        if self.enabled_local {
+            return true;
+        }
+        // If it's a local-only install and not enabled locally, check user
+        self.enabled_user
+    }
+
+    /// Human-readable enabled context description
+    pub fn enabled_context(&self) -> &'static str {
+        match (self.enabled_user, self.enabled_local) {
+            (true, true) => "User + Local",
+            (true, false) => "User only",
+            (false, true) => "Local only",
+            (false, false) => "Disabled",
+        }
+    }
+
+    /// Scope indicator for the list view: [U], [L], or [L*]
+    pub fn scope_indicator(&self) -> &'static str {
+        match (self.install_scope, self.is_current_project) {
+            (Scope::User, _) => "[U]",
+            (Scope::Local, true) => "[L]",
+            (Scope::Local, false) => "[L*]", // Local but different project
+        }
+    }
+
     pub fn status_indicator(&self) -> &'static str {
-        if self.enabled {
+        if self.is_enabled() {
             "[+]"
         } else {
             "[-]"
@@ -154,9 +191,11 @@ mod tests {
             description: None,
             version: None,
             author: None,
-            enabled: true,
-            scope: Scope::User,
+            install_scope: Scope::User,
             install_path: None,
+            is_current_project: true,
+            enabled_user: true,
+            enabled_local: false,
             installed_at: None,
             last_updated: None,
         };
@@ -172,16 +211,110 @@ mod tests {
             description: None,
             version: None,
             author: None,
-            enabled: true,
-            scope: Scope::User,
+            install_scope: Scope::User,
             install_path: None,
+            is_current_project: true,
+            enabled_user: true,
+            enabled_local: false,
             installed_at: None,
             last_updated: None,
         };
 
         assert_eq!(plugin.status_indicator(), "[+]");
-        plugin.enabled = false;
+        plugin.enabled_user = false;
         assert_eq!(plugin.status_indicator(), "[-]");
+    }
+
+    #[test]
+    fn test_plugin_is_enabled() {
+        let mut plugin = Plugin {
+            id: "test@marketplace".to_string(),
+            name: "test".to_string(),
+            marketplace: "marketplace".to_string(),
+            description: None,
+            version: None,
+            author: None,
+            install_scope: Scope::User,
+            install_path: None,
+            is_current_project: true,
+            enabled_user: false,
+            enabled_local: false,
+            installed_at: None,
+            last_updated: None,
+        };
+
+        // Both disabled
+        assert!(!plugin.is_enabled());
+
+        // User enabled only
+        plugin.enabled_user = true;
+        assert!(plugin.is_enabled());
+
+        // Local enabled overrides
+        plugin.enabled_user = false;
+        plugin.enabled_local = true;
+        assert!(plugin.is_enabled());
+
+        // Both enabled
+        plugin.enabled_user = true;
+        assert!(plugin.is_enabled());
+    }
+
+    #[test]
+    fn test_plugin_enabled_context() {
+        let mut plugin = Plugin {
+            id: "test@marketplace".to_string(),
+            name: "test".to_string(),
+            marketplace: "marketplace".to_string(),
+            description: None,
+            version: None,
+            author: None,
+            install_scope: Scope::User,
+            install_path: None,
+            is_current_project: true,
+            enabled_user: false,
+            enabled_local: false,
+            installed_at: None,
+            last_updated: None,
+        };
+
+        assert_eq!(plugin.enabled_context(), "Disabled");
+
+        plugin.enabled_user = true;
+        assert_eq!(plugin.enabled_context(), "User only");
+
+        plugin.enabled_local = true;
+        assert_eq!(plugin.enabled_context(), "User + Local");
+
+        plugin.enabled_user = false;
+        assert_eq!(plugin.enabled_context(), "Local only");
+    }
+
+    #[test]
+    fn test_plugin_scope_indicator() {
+        let mut plugin = Plugin {
+            id: "test@marketplace".to_string(),
+            name: "test".to_string(),
+            marketplace: "marketplace".to_string(),
+            description: None,
+            version: None,
+            author: None,
+            install_scope: Scope::User,
+            install_path: None,
+            is_current_project: true,
+            enabled_user: false,
+            enabled_local: false,
+            installed_at: None,
+            last_updated: None,
+        };
+
+        assert_eq!(plugin.scope_indicator(), "[U]");
+
+        plugin.install_scope = Scope::Local;
+        assert_eq!(plugin.scope_indicator(), "[L]");
+
+        plugin.is_current_project = false;
+        assert_eq!(plugin.scope_indicator(), "[L*]");
     }
 
     #[test]

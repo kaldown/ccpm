@@ -6,6 +6,7 @@ pub enum AppMode {
     Search,
     Help,
     Confirm(ConfirmAction),
+    DetailModal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,11 +139,11 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(_, p)| {
-                // Scope filter
+                // Scope filter (based on installation scope)
                 let scope_match = match self.scope_filter {
                     ScopeFilter::All => true,
-                    ScopeFilter::User => p.scope == Scope::User,
-                    ScopeFilter::Local => p.scope == Scope::Local,
+                    ScopeFilter::User => p.install_scope == Scope::User,
+                    ScopeFilter::Local => p.install_scope == Scope::Local,
                 };
 
                 // Search filter
@@ -168,12 +169,16 @@ impl App {
     pub fn toggle_selected_plugin(&mut self) {
         if let Some(plugin) = self.selected_plugin() {
             let id = plugin.id.clone();
-            let scope = plugin.scope;
+            let scope = plugin.install_scope;
 
             match self.service.toggle_plugin(plugin) {
                 Ok(new_state) => {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                        p.enabled = new_state;
+                        // Update the appropriate enabled field based on scope
+                        match scope {
+                            Scope::User => p.enabled_user = new_state,
+                            Scope::Local => p.enabled_local = new_state,
+                        }
                     }
                     self.message = Some(StatusMessage::info(format!(
                         "{} {} in {} scope",
@@ -191,18 +196,21 @@ impl App {
 
     pub fn enable_selected_plugin(&mut self) {
         if let Some(plugin) = self.selected_plugin() {
-            if plugin.enabled {
+            if plugin.is_enabled() {
                 self.message = Some(StatusMessage::info("Plugin already enabled"));
                 return;
             }
 
             let id = plugin.id.clone();
-            let scope = plugin.scope;
+            let scope = plugin.install_scope;
 
             match self.service.enable_plugin(&id, scope) {
                 Ok(()) => {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                        p.enabled = true;
+                        match scope {
+                            Scope::User => p.enabled_user = true,
+                            Scope::Local => p.enabled_local = true,
+                        }
                     }
                     self.message = Some(StatusMessage::info(format!("Enabled {}", id)));
                 }
@@ -215,18 +223,21 @@ impl App {
 
     pub fn disable_selected_plugin(&mut self) {
         if let Some(plugin) = self.selected_plugin() {
-            if !plugin.enabled {
+            if !plugin.is_enabled() {
                 self.message = Some(StatusMessage::info("Plugin already disabled"));
                 return;
             }
 
             let id = plugin.id.clone();
-            let scope = plugin.scope;
+            let scope = plugin.install_scope;
 
             match self.service.disable_plugin(&id, scope) {
                 Ok(()) => {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                        p.enabled = false;
+                        match scope {
+                            Scope::User => p.enabled_user = false,
+                            Scope::Local => p.enabled_local = false,
+                        }
                     }
                     self.message = Some(StatusMessage::info(format!("Disabled {}", id)));
                 }
@@ -242,6 +253,16 @@ impl App {
     }
 
     pub fn hide_help(&mut self) {
+        self.mode = AppMode::Normal;
+    }
+
+    pub fn show_detail_modal(&mut self) {
+        if self.selected_plugin().is_some() {
+            self.mode = AppMode::DetailModal;
+        }
+    }
+
+    pub fn hide_detail_modal(&mut self) {
         self.mode = AppMode::Normal;
     }
 
@@ -276,7 +297,7 @@ impl App {
     }
 
     pub fn plugin_count(&self) -> (usize, usize) {
-        let enabled = self.plugins.iter().filter(|p| p.enabled).count();
+        let enabled = self.plugins.iter().filter(|p| p.is_enabled()).count();
         (enabled, self.plugins.len())
     }
 }

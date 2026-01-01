@@ -15,18 +15,23 @@ pub fn render_plugin_list(frame: &mut Frame, app: &App, area: Rect) {
         .map(|&idx| {
             let plugin = &app.plugins[idx];
 
-            let scope_indicator = match plugin.scope {
-                Scope::User => Span::styled("[U]", Style::default().fg(Color::Blue)),
-                Scope::Local => Span::styled("[L]", Style::default().fg(Color::Magenta)),
-            };
+            // Scope indicator: [U], [L], or [L*] for local in other project
+            let scope_indicator = Span::styled(
+                plugin.scope_indicator(),
+                match (plugin.install_scope, plugin.is_current_project) {
+                    (Scope::User, _) => Style::default().fg(Color::Blue),
+                    (Scope::Local, true) => Style::default().fg(Color::Magenta),
+                    (Scope::Local, false) => Style::default().fg(Color::Yellow), // Different project
+                },
+            );
 
-            let status_indicator = if plugin.enabled {
+            let status_indicator = if plugin.is_enabled() {
                 Span::styled(" [+] ", Style::default().fg(Color::Green))
             } else {
                 Span::styled(" [-] ", Style::default().fg(Color::DarkGray))
             };
 
-            let name_style = if plugin.enabled {
+            let name_style = if plugin.is_enabled() {
                 Style::default().fg(Color::White)
             } else {
                 Style::default().fg(Color::DarkGray)

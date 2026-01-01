@@ -3,6 +3,7 @@ use super::{
     Author, Plugin, Result, Scope,
 };
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -31,29 +32,35 @@ impl PluginDiscovery {
         let installed = self.load_installed_plugins();
         let _marketplaces = self.load_known_marketplaces();
 
-        // Merge enabled status from both scopes
-        let mut plugin_status: HashMap<String, (bool, Scope)> = HashMap::new();
+        // Track enabled status from BOTH scopes separately
+        let mut user_enabled: HashMap<String, bool> = HashMap::new();
+        let mut local_enabled: HashMap<String, bool> = HashMap::new();
 
-        // User scope plugins
         for (id, enabled) in &user_settings.enabled_plugins {
-            plugin_status.insert(id.clone(), (*enabled, Scope::User));
+            user_enabled.insert(id.clone(), *enabled);
         }
-
-        // Local scope plugins override user scope
         for (id, enabled) in &local_settings.enabled_plugins {
-            plugin_status.insert(id.clone(), (*enabled, Scope::Local));
+            local_enabled.insert(id.clone(), *enabled);
         }
 
         // Build plugin list from installed plugins
         for (id, entries) in &installed.plugins {
             if let Some(entry) = entries.first() {
-                let (enabled, scope) = plugin_status
-                    .get(id)
-                    .copied()
-                    .unwrap_or((false, Scope::User));
-
                 let (name, marketplace) = parse_plugin_id(id);
                 let manifest = self.load_plugin_manifest(&entry.install_path);
+
+                // Determine installation scope from entry.scope (source of truth)
+                let install_scope = match entry.scope.as_str() {
+                    "local" => Scope::Local,
+                    _ => Scope::User,
+                };
+
+                // For local installs, check if it's the current project
+                let is_current_project = if install_scope == Scope::Local {
+                    self.is_local_install_current_project(&entry.install_path)
+                } else {
+                    true // User scope is always "current"
+                };
 
                 plugins.push(Plugin {
                     id: id.clone(),
@@ -70,9 +77,11 @@ impl PluginDiscovery {
                             email: a.email.clone(),
                         })
                     }),
-                    enabled,
-                    scope,
+                    install_scope,
                     install_path: Some(entry.install_path.clone()),
+                    is_current_project,
+                    enabled_user: user_enabled.get(id).copied().unwrap_or(false),
+                    enabled_local: local_enabled.get(id).copied().unwrap_or(false),
                     installed_at: Some(entry.installed_at.clone()),
                     last_updated: Some(entry.last_updated.clone()),
                 });
@@ -80,7 +89,10 @@ impl PluginDiscovery {
         }
 
         // Also include plugins that are in settings but not installed
-        for (id, (enabled, scope)) in plugin_status.iter() {
+        let all_ids: std::collections::HashSet<_> =
+            user_enabled.keys().chain(local_enabled.keys()).collect();
+
+        for id in all_ids {
             if !installed.plugins.contains_key(id) {
                 let (name, marketplace) = parse_plugin_id(id);
                 plugins.push(Plugin {
@@ -90,9 +102,11 @@ impl PluginDiscovery {
                     description: None,
                     version: None,
                     author: None,
-                    enabled: *enabled,
-                    scope: *scope,
+                    install_scope: Scope::User, // Not installed, default to user
                     install_path: None,
+                    is_current_project: true,
+                    enabled_user: user_enabled.get(id).copied().unwrap_or(false),
+                    enabled_local: local_enabled.get(id).copied().unwrap_or(false),
                     installed_at: None,
                     last_updated: None,
                 });
@@ -103,6 +117,17 @@ impl PluginDiscovery {
         plugins.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
         Ok(plugins)
+    }
+
+    /// Check if a local install path is within the current working directory
+    fn is_local_install_current_project(&self, install_path: &Path) -> bool {
+        if let Ok(cwd) = env::current_dir() {
+            // Check if install_path is under the current directory's .claude folder
+            let current_claude_dir = cwd.join(".claude");
+            install_path.starts_with(&current_claude_dir)
+        } else {
+            false
+        }
     }
 
     /// Get marketplace info
