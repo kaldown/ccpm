@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 
+[![CCPM UI](docs/images/ccpm_thumbnail.png)](docs/images/ccpm_thumbnail.png)
+
 A terminal user interface (TUI) application for managing Claude Code plugins. Built with Rust and Ratatui, CCPM provides a lazygit-style experience for enabling, disabling, and managing your Claude Code plugins.
 
 ## Features
