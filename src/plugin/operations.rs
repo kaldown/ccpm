@@ -408,4 +408,50 @@ mod tests {
         // Clean up the lock file manually since no guard was created
         fs::remove_file(&lock_path).ok();
     }
+
+    #[test]
+    fn test_corrupted_lock_file_is_deleted() {
+        let (_temp, service) = setup_test_env();
+
+        let settings_path = service.paths.user_settings();
+        let lock_path = settings_path.with_extension("lock");
+
+        // Write a corrupted lock file (invalid JSON)
+        fs::write(&lock_path, "this is not valid json").unwrap();
+        assert!(lock_path.exists(), "Corrupted lock file should exist before test");
+
+        // Should succeed because corrupted lock is treated as stale
+        let guard = service.acquire_lock(&settings_path);
+        assert!(guard.is_ok(), "Should acquire lock when existing lock is corrupted");
+
+        // Verify the new lock has valid metadata with our PID
+        let content = fs::read_to_string(&lock_path).unwrap();
+        let metadata: LockMetadata = serde_json::from_str(&content).unwrap();
+        assert_eq!(metadata.pid, std::process::id());
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_empty_lock_file_is_deleted() {
+        let (_temp, service) = setup_test_env();
+
+        let settings_path = service.paths.user_settings();
+        let lock_path = settings_path.with_extension("lock");
+
+        // Write an empty lock file
+        fs::write(&lock_path, "").unwrap();
+        assert!(lock_path.exists(), "Empty lock file should exist before test");
+
+        // Should succeed because empty lock is treated as corrupted/stale
+        let guard = service.acquire_lock(&settings_path);
+        assert!(guard.is_ok(), "Should acquire lock when existing lock is empty");
+
+        // Verify the new lock has valid metadata
+        let content = fs::read_to_string(&lock_path).unwrap();
+        let metadata: LockMetadata = serde_json::from_str(&content).unwrap();
+        assert_eq!(metadata.pid, std::process::id());
+
+        drop(guard);
+    }
 }

@@ -27,6 +27,10 @@ pub enum Commands {
         /// Show only disabled plugins
         #[arg(short, long)]
         disabled: bool,
+
+        /// Show debug information (Option values and file paths)
+        #[arg(long)]
+        debug: bool,
     },
 
     /// Enable a plugin
@@ -91,16 +95,34 @@ pub fn run_command(cmd: Commands) -> Result<()> {
             scope,
             enabled,
             disabled,
-        } => list_plugins(scope.into(), enabled, disabled),
+            debug,
+        } => list_plugins(scope.into(), enabled, disabled, debug),
         Commands::Enable { plugin, scope } => enable_plugin(&plugin, scope.into()),
         Commands::Disable { plugin, scope } => disable_plugin(&plugin, scope.into()),
         Commands::Info { plugin } => show_info(&plugin),
     }
 }
 
-fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bool) -> Result<()> {
+fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bool, debug: bool) -> Result<()> {
     let discovery = PluginDiscovery::new()?;
     let plugins = discovery.discover_all()?;
+
+    // Debug output before filtering
+    if debug {
+        eprintln!("DEBUG: Loading {} plugins...", plugins.len());
+        for plugin in &plugins {
+            eprintln!(
+                "DEBUG: {} -> user={:?} project={:?} local={:?} -> is_enabled={} project_path={:?}",
+                plugin.id,
+                plugin.enabled_user,
+                plugin.enabled_project,
+                plugin.enabled_local,
+                plugin.is_enabled(),
+                plugin.project_path
+            );
+        }
+        eprintln!();
+    }
 
     let filtered: Vec<_> = plugins
         .iter()

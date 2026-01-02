@@ -141,8 +141,51 @@ pub struct Author {
 The plugin scope is determined from `installed_plugins.json`, not from which `settings.json` has it enabled:
 
 1. **Installation scope** (`install_scope`): Read from `entry.scope` in `installed_plugins.json`
-2. **Current project detection** (`is_current_project`): For local installs, compare `install_path` with current working directory
-3. **Enabled status**: Tracked separately for user (`~/.claude/settings.json`) and local (`./.claude/settings.json`)
+2. **Current project detection** (`is_current_project`): For project/local installs, compare `entry.project_path` with current working directory
+3. **Enabled status**: Read from the PLUGIN's project directory, not CWD:
+   - User scope: Only `~/.claude/settings.json` applies
+   - Project/Local scope: Settings read from `{projectPath}/.claude/settings.json` and `{projectPath}/.claude/settings.local.json`
+
+### Cross-Project Settings Isolation
+
+Plugins installed in different projects read their enabled state from THEIR project's settings:
+
+```
+Plugin: agent-orchestration@marketplace
+Install scope: local
+Project path: ~/Projects/Ternv3
+
+When CCPM runs from ~/Projects/ccpm:
+  - CWD settings: ~/Projects/ccpm/.claude/settings*.json (IGNORED for this plugin)
+  - Plugin settings: ~/Projects/Ternv3/.claude/settings*.json (USED)
+```
+
+This ensures that a plugin's enabled state is consistent regardless of which directory CCPM is run from.
+
+### Settings Loading Strategy
+
+```rust
+// Cache to avoid re-reading project settings
+let mut project_settings_cache: HashMap<PathBuf, (Option<Settings>, Option<Settings>)>;
+
+// For each plugin:
+match plugin.install_scope {
+    Scope::User => {
+        // Only user settings apply
+        (None, None)
+    }
+    Scope::Project | Scope::Local => {
+        // Read from plugin's project_path
+        if let Some(ref proj_path) = entry.project_path {
+            let (proj, local) = cache.entry(proj_path.clone())
+                .or_insert_with(|| ConfigPaths::load_settings_from_project(proj_path));
+            // Use these settings
+        } else {
+            // Fallback to CWD (legacy behavior)
+        }
+    }
+}
+```
 
 This allows accurate display of:
 - Where a plugin is physically installed
@@ -249,3 +292,4 @@ Stale lock detection:
 - On non-Unix: Conservatively assumes process is active
 - If PID is dead, lock file is deleted and new lock is acquired
 - If PID is active, returns `PluginError::LockConflict { path, pid }`
+- Corrupted or empty lock files are treated as stale and auto-deleted

@@ -148,6 +148,29 @@ impl ConfigPaths {
     }
 }
 
+impl ConfigPaths {
+    /// Load settings from a specific project directory (not CWD).
+    /// Used to read settings from the plugin's actual project, not the current working directory.
+    pub fn load_settings_from_project(project_path: &std::path::Path) -> (Option<Settings>, Option<Settings>) {
+        let claude_dir = project_path.join(".claude");
+
+        let project_settings = Self::load_settings_file(&claude_dir.join("settings.json"));
+        let local_settings = Self::load_settings_file(&claude_dir.join("settings.local.json"));
+
+        (project_settings, local_settings)
+    }
+
+    fn load_settings_file(path: &std::path::Path) -> Option<Settings> {
+        if path.exists() {
+            std::fs::read_to_string(path)
+                .ok()
+                .and_then(|content| serde_json::from_str(&content).ok())
+        } else {
+            None
+        }
+    }
+}
+
 impl Default for ConfigPaths {
     fn default() -> Self {
         Self::new().unwrap_or_else(|_| Self {

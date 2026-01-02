@@ -133,6 +133,37 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ## Completed Features
 
+### Cross-Project Settings Isolation Fix (2026-01-02)
+
+**Bug**: Plugins installed in Project A were reading their enabled state from the CWD's `.claude/` directory instead of from Project A's settings.
+
+**Example**: Plugin `agent-orchestration` installed in `~/Projects/Ternv3` (Local scope) would show the wrong enabled state when CCPM was run from `~/Projects/ccpm`.
+
+**Root cause**: `PluginDiscovery::discover_all()` loaded project/local settings from CWD for ALL plugins, regardless of where they were installed. This is correct for plugins installed in the current project, but wrong for plugins installed in other projects.
+
+**Fix**:
+- Added `ConfigPaths::load_settings_from_project(project_path)` helper to load settings from any project directory
+- Modified `discover_all()` to check `entry.project_path` for each plugin
+- For project/local scope plugins with a `project_path`, settings are now loaded from that project's `.claude/` directory
+- Added settings cache to avoid re-reading the same project's settings multiple times
+
+**CLI Debug Flag**:
+- Added `--debug` flag to `ccpm list` command
+- Outputs Option values (`enabled_user`, `enabled_project`, `enabled_local`) and `project_path` to stderr
+- Helps diagnose settings-related issues
+
+Files modified: `src/plugin/config.rs`, `src/plugin/discovery.rs`, `src/cli/mod.rs`
+
+---
+
+### Corrupted Lock File Handling (2026-01-02)
+
+**Enhancement**: Lock files that contain invalid JSON or are empty are now treated as stale and automatically deleted, allowing new lock acquisition to proceed.
+
+Files modified: `src/plugin/operations.rs`
+
+---
+
 ### Settings Precedence Bug Fix (2026-01-02)
 
 **Bug**: Local `false` didn't override Project `true`. CCPM incorrectly showed plugins as enabled when local settings explicitly disabled them.
