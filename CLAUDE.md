@@ -177,18 +177,6 @@ MSRV is Rust 1.70.
 
 See `FEATURE_PLAN.md` for full details. Context files in `.claude/` directory.
 
-### Lock File Handling (Feature A)
-
-**Problem**: Lock files (`settings.lock`) created but never deleted, leaving stale files.
-
-**Solution**:
-- `LockFileGuard` struct deletes lock on Drop
-- Lock file contains JSON with PID + timestamp
-- Stale lock detection (check if PID still running)
-- `LockConflict` error for active locks
-
-**Key files**: `src/plugin/operations.rs`, `src/plugin/mod.rs`
-
 ### Scope Selection (Feature B)
 
 **Problem**: Toggle uses `install_scope`, may create unwanted `settings.json`.

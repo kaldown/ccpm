@@ -207,3 +207,35 @@ App
 - All writes use atomic operations (write to temp, rename)
 - File locking with fs2 for concurrent access safety
 - Graceful handling of missing/malformed files
+
+#### Lock File Handling
+
+Lock files are managed with vim-style cleanup behavior:
+
+```rust
+/// Metadata stored in lock files for debugging and stale detection
+struct LockMetadata {
+    pid: u32,
+    timestamp: DateTime<Utc>,
+}
+
+/// Guard that auto-deletes lock file on Drop (normal completion or panic)
+pub struct LockFileGuard {
+    lock_path: PathBuf,
+    _file: File, // Holds the exclusive lock
+}
+```
+
+Lock file JSON format:
+```json
+{
+  "pid": 12345,
+  "timestamp": "2026-01-02T10:30:00Z"
+}
+```
+
+Stale lock detection:
+- On Unix: Uses `kill -0 $PID` to check if process is running
+- On non-Unix: Conservatively assumes process is active
+- If PID is dead, lock file is deleted and new lock is acquired
+- If PID is active, returns `PluginError::LockConflict { path, pid }`

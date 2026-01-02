@@ -46,6 +46,9 @@ pub enum PluginError {
         source: std::io::Error,
     },
 
+    #[error("Lock file conflict: {path} (held by PID {pid})")]
+    LockConflict { path: PathBuf, pid: u32 },
+
     #[error("Home directory not found")]
     HomeDirNotFound,
 }

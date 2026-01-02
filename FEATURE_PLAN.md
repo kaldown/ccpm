@@ -4,23 +4,6 @@ This document tracks planned features and ideas for future development.
 
 ## In Progress Features
 
-### A. Vim-style Lock File Handling
-
-**Status**: Planned (2026-01-02)
-**Priority**: High
-**Context File**: `.claude/ccpm-task-lock.md`
-
-Current problem: Lock files (`settings.lock`, `settings.local.lock`) are created but never deleted, leaving stale files.
-
-Implementation:
-- `LockFileGuard` struct that deletes lock file on Drop
-- Lock file contains JSON with PID and timestamp
-- Check for existing lock before creating
-- Detect stale locks (process not running)
-- Return `LockConflict` error for active locks (TUI can show dialog)
-
----
-
 ### B. Scope Selection on Enable/Disable
 
 **Status**: Planned (2026-01-02)
@@ -150,11 +133,25 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ## Completed Features
 
+### A. Vim-style Lock File Handling (2026-01-02)
+
+Lock files (`settings.lock`, etc.) are now properly managed:
+- `LockFileGuard` struct auto-deletes lock file on Drop (normal completion or panic)
+- Lock file contains JSON with PID and timestamp for debugging
+- Stale lock detection: checks if holding process is still running
+- Returns `LockConflict` error for active locks (TUI can show dialog)
+- Cross-platform: Unix uses `kill -0`, non-Unix conservatively assumes active
+
+Files modified: `src/plugin/operations.rs`, `src/plugin/mod.rs`
+
+---
+
 - [x] Basic TUI plugin list
 - [x] User/Local scope display (partial - needs Project scope)
 - [x] Enable/disable plugins
 - [x] Search/filter plugins
 - [x] Detail modal
+- [x] Vim-style lock file handling (Feature A)
 
 ---
 
