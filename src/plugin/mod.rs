@@ -96,9 +96,11 @@ pub struct Plugin {
     pub is_current_project: bool,      // For project/local: is it THIS project?
 
     // Enabled status (tracked separately for each scope)
-    pub enabled_user: bool,    // Enabled in ~/.claude/settings.json
-    pub enabled_project: bool, // Enabled in ./.claude/settings.json (project scope)
-    pub enabled_local: bool,   // Enabled in ./.claude/settings.local.json
+    // None = no setting in that scope, Some(true) = enabled, Some(false) = disabled
+    // Precedence: Local > Project > User (per Claude Code docs)
+    pub enabled_user: Option<bool>,    // Setting in ~/.claude/settings.json
+    pub enabled_project: Option<bool>, // Setting in ./.claude/settings.json (project scope)
+    pub enabled_local: Option<bool>,   // Setting in ./.claude/settings.local.json
 
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,
@@ -110,28 +112,32 @@ impl Plugin {
     }
 
     /// Returns true if the plugin is effectively enabled in the current context
-    /// Precedence: Local > Project > User
+    /// Precedence: Local > Project > User (per Claude Code docs)
+    /// If a scope has an explicit setting (Some), it wins over lower-priority scopes
     pub fn is_enabled(&self) -> bool {
-        // Local overrides Project overrides User
-        if self.enabled_local {
-            return true;
+        // Local setting wins if present (true OR false)
+        if let Some(local) = self.enabled_local {
+            return local;
         }
-        if self.enabled_project {
-            return true;
+        // Project setting wins if present (true OR false)
+        if let Some(project) = self.enabled_project {
+            return project;
         }
-        self.enabled_user
+        // Fall back to user setting, or false if no setting anywhere
+        self.enabled_user.unwrap_or(false)
     }
 
     /// Human-readable enabled context description
+    /// Shows which scopes have explicit settings and their values
     pub fn enabled_context(&self) -> String {
         let mut contexts = Vec::new();
-        if self.enabled_user {
+        if let Some(true) = self.enabled_user {
             contexts.push("User");
         }
-        if self.enabled_project {
+        if let Some(true) = self.enabled_project {
             contexts.push("Project");
         }
-        if self.enabled_local {
+        if let Some(true) = self.enabled_local {
             contexts.push("Local");
         }
 
@@ -139,6 +145,20 @@ impl Plugin {
             "Disabled".to_string()
         } else {
             contexts.join(" + ")
+        }
+    }
+
+    /// Returns the scope that is determining the current enabled state
+    /// Useful for showing which setting is "winning"
+    pub fn effective_scope(&self) -> Option<&'static str> {
+        if self.enabled_local.is_some() {
+            Some("Local")
+        } else if self.enabled_project.is_some() {
+            Some("Project")
+        } else if self.enabled_user.is_some() {
+            Some("User")
+        } else {
+            None
         }
     }
 
@@ -231,9 +251,9 @@ mod tests {
             install_path: None,
             project_path: None,
             is_current_project: true,
-            enabled_user: false,
-            enabled_project: false,
-            enabled_local: false,
+            enabled_user: None,    // No setting
+            enabled_project: None, // No setting
+            enabled_local: None,   // No setting
             installed_at: None,
             last_updated: None,
         }
@@ -242,67 +262,132 @@ mod tests {
     #[test]
     fn test_plugin_display_name() {
         let mut plugin = make_test_plugin();
-        plugin.enabled_user = true;
+        plugin.enabled_user = Some(true);
         assert_eq!(plugin.display_name(), "test@marketplace");
     }
 
     #[test]
     fn test_plugin_status_indicator() {
         let mut plugin = make_test_plugin();
-        plugin.enabled_user = true;
+        plugin.enabled_user = Some(true);
 
         assert_eq!(plugin.status_indicator(), "[+]");
-        plugin.enabled_user = false;
+        plugin.enabled_user = Some(false);
         assert_eq!(plugin.status_indicator(), "[-]");
+        plugin.enabled_user = None;
+        assert_eq!(plugin.status_indicator(), "[-]"); // No settings = disabled
     }
 
     #[test]
-    fn test_plugin_is_enabled() {
+    fn test_plugin_is_enabled_basic() {
         let mut plugin = make_test_plugin();
 
-        // All disabled
+        // No settings anywhere = disabled
         assert!(!plugin.is_enabled());
 
         // User enabled only
-        plugin.enabled_user = true;
+        plugin.enabled_user = Some(true);
         assert!(plugin.is_enabled());
 
-        // Project enabled overrides user disabled
-        plugin.enabled_user = false;
-        plugin.enabled_project = true;
+        // User disabled explicitly
+        plugin.enabled_user = Some(false);
+        assert!(!plugin.is_enabled());
+    }
+
+    #[test]
+    fn test_plugin_is_enabled_precedence() {
+        let mut plugin = make_test_plugin();
+
+        // Project enabled, no local = enabled
+        plugin.enabled_project = Some(true);
         assert!(plugin.is_enabled());
 
-        // Local enabled overrides all
-        plugin.enabled_project = false;
-        plugin.enabled_local = true;
+        // Local enabled overrides project
+        plugin.enabled_local = Some(true);
         assert!(plugin.is_enabled());
 
-        // All enabled
-        plugin.enabled_user = true;
-        plugin.enabled_project = true;
+        // CRITICAL: Local DISABLED overrides Project ENABLED
+        plugin.enabled_project = Some(true);
+        plugin.enabled_local = Some(false);
+        assert!(!plugin.is_enabled()); // Local wins!
+
+        // Project disabled overrides User enabled
+        plugin.enabled_user = Some(true);
+        plugin.enabled_project = Some(false);
+        plugin.enabled_local = None;
+        assert!(!plugin.is_enabled()); // Project wins!
+    }
+
+    #[test]
+    fn test_plugin_is_enabled_fallthrough() {
+        let mut plugin = make_test_plugin();
+
+        // No local, no project → user wins
+        plugin.enabled_user = Some(true);
         assert!(plugin.is_enabled());
+
+        // No local → project wins over user
+        plugin.enabled_user = Some(true);
+        plugin.enabled_project = Some(false);
+        assert!(!plugin.is_enabled());
+
+        // Local present → local wins
+        plugin.enabled_user = Some(true);
+        plugin.enabled_project = Some(true);
+        plugin.enabled_local = Some(false);
+        assert!(!plugin.is_enabled());
     }
 
     #[test]
     fn test_plugin_enabled_context() {
         let mut plugin = make_test_plugin();
 
+        // No settings
         assert_eq!(plugin.enabled_context(), "Disabled");
 
-        plugin.enabled_user = true;
+        // User enabled
+        plugin.enabled_user = Some(true);
         assert_eq!(plugin.enabled_context(), "User");
 
-        plugin.enabled_project = true;
+        // User + Project enabled
+        plugin.enabled_project = Some(true);
         assert_eq!(plugin.enabled_context(), "User + Project");
 
-        plugin.enabled_local = true;
+        // All three enabled
+        plugin.enabled_local = Some(true);
         assert_eq!(plugin.enabled_context(), "User + Project + Local");
 
-        plugin.enabled_user = false;
+        // User disabled, Project + Local enabled
+        plugin.enabled_user = Some(false);
         assert_eq!(plugin.enabled_context(), "Project + Local");
 
-        plugin.enabled_project = false;
+        // Only Local enabled
+        plugin.enabled_project = Some(false);
         assert_eq!(plugin.enabled_context(), "Local");
+
+        // All explicitly disabled
+        plugin.enabled_local = Some(false);
+        assert_eq!(plugin.enabled_context(), "Disabled");
+    }
+
+    #[test]
+    fn test_plugin_effective_scope() {
+        let mut plugin = make_test_plugin();
+
+        // No settings
+        assert_eq!(plugin.effective_scope(), None);
+
+        // Only user setting
+        plugin.enabled_user = Some(true);
+        assert_eq!(plugin.effective_scope(), Some("User"));
+
+        // Project overrides user
+        plugin.enabled_project = Some(false);
+        assert_eq!(plugin.effective_scope(), Some("Project"));
+
+        // Local overrides all
+        plugin.enabled_local = Some(true);
+        assert_eq!(plugin.effective_scope(), Some("Local"));
     }
 
     #[test]

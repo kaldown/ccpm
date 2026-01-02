@@ -94,11 +94,15 @@ pub struct Plugin {
     // Installation information
     pub install_scope: Scope,    // Where installed (from installed_plugins.json)
     pub install_path: Option<PathBuf>,
+    pub project_path: Option<PathBuf>,  // For project/local: which project
     pub is_current_project: bool, // For local: is it THIS project?
 
     // Enabled status (tracked separately for each scope)
-    pub enabled_user: bool,      // Enabled in ~/.claude/settings.json
-    pub enabled_local: bool,     // Enabled in ./.claude/settings.json
+    // Option semantics: None = no setting, Some(true) = enabled, Some(false) = disabled
+    // Precedence: Local > Project > User (per Claude Code docs)
+    pub enabled_user: Option<bool>,     // Setting in ~/.claude/settings.json
+    pub enabled_project: Option<bool>,  // Setting in ./.claude/settings.json
+    pub enabled_local: Option<bool>,    // Setting in ./.claude/settings.local.json
 
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,
@@ -106,18 +110,24 @@ pub struct Plugin {
 
 impl Plugin {
     /// Returns true if effectively enabled in current context
+    /// Precedence: Local > Project > User
+    /// If a scope has Some(_), it wins over lower-priority scopes
     pub fn is_enabled(&self) -> bool;
 
-    /// "User only" | "Local only" | "User + Local" | "Disabled"
-    pub fn enabled_context(&self) -> &'static str;
+    /// Human-readable context: "User + Project" | "Local" | "Disabled"
+    pub fn enabled_context(&self) -> String;
 
-    /// "[U]" | "[L]" | "[L*]" (local in different project)
+    /// Which scope is determining the current state
+    pub fn effective_scope(&self) -> Option<&'static str>;
+
+    /// "[U]" | "[P]" | "[P*]" | "[L]" | "[L*]"
     pub fn scope_indicator(&self) -> &'static str;
 }
 
 pub enum Scope {
-    User,   // Installed in ~/.claude
-    Local,  // Installed in project's .claude
+    User,    // Installed in ~/.claude
+    Project, // Installed in project's .claude (shared)
+    Local,   // Installed in project's .claude (gitignored)
 }
 
 pub struct Author {

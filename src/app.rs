@@ -177,9 +177,9 @@ impl App {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
                         // Update the appropriate enabled field based on scope
                         match scope {
-                            Scope::User => p.enabled_user = new_state,
-                            Scope::Project => p.enabled_project = new_state,
-                            Scope::Local => p.enabled_local = new_state,
+                            Scope::User => p.enabled_user = Some(new_state),
+                            Scope::Project => p.enabled_project = Some(new_state),
+                            Scope::Local => p.enabled_local = Some(new_state),
                         }
                     }
                     self.message = Some(StatusMessage::info(format!(
@@ -210,9 +210,9 @@ impl App {
                 Ok(()) => {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
                         match scope {
-                            Scope::User => p.enabled_user = true,
-                            Scope::Project => p.enabled_project = true,
-                            Scope::Local => p.enabled_local = true,
+                            Scope::User => p.enabled_user = Some(true),
+                            Scope::Project => p.enabled_project = Some(true),
+                            Scope::Local => p.enabled_local = Some(true),
                         }
                     }
                     self.message = Some(StatusMessage::info(format!("Enabled {}", id)));
@@ -238,9 +238,9 @@ impl App {
                 Ok(()) => {
                     if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
                         match scope {
-                            Scope::User => p.enabled_user = false,
-                            Scope::Project => p.enabled_project = false,
-                            Scope::Local => p.enabled_local = false,
+                            Scope::User => p.enabled_user = Some(false),
+                            Scope::Project => p.enabled_project = Some(false),
+                            Scope::Local => p.enabled_local = Some(false),
                         }
                     }
                     self.message = Some(StatusMessage::info(format!("Disabled {}", id)));

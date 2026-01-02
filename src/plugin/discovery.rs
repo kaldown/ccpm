@@ -98,9 +98,11 @@ impl PluginDiscovery {
                     install_path: Some(entry.install_path.clone()),
                     project_path: entry.project_path.clone(),
                     is_current_project,
-                    enabled_user: user_enabled.get(id).copied().unwrap_or(false),
-                    enabled_project: project_enabled.get(id).copied().unwrap_or(false),
-                    enabled_local: local_enabled.get(id).copied().unwrap_or(false),
+                    // Preserve Option semantics: None = no setting, Some = explicit setting
+                    // This is critical for correct precedence (Local > Project > User)
+                    enabled_user: user_enabled.get(id).copied(),
+                    enabled_project: project_enabled.get(id).copied(),
+                    enabled_local: local_enabled.get(id).copied(),
                     installed_at: Some(entry.installed_at.clone()),
                     last_updated: Some(entry.last_updated.clone()),
                 });
@@ -128,9 +130,10 @@ impl PluginDiscovery {
                     install_path: None,
                     project_path: None,
                     is_current_project: true,
-                    enabled_user: user_enabled.get(id).copied().unwrap_or(false),
-                    enabled_project: project_enabled.get(id).copied().unwrap_or(false),
-                    enabled_local: local_enabled.get(id).copied().unwrap_or(false),
+                    // Preserve Option semantics for correct precedence
+                    enabled_user: user_enabled.get(id).copied(),
+                    enabled_project: project_enabled.get(id).copied(),
+                    enabled_local: local_enabled.get(id).copied(),
                     installed_at: None,
                     last_updated: None,
                 });

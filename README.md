@@ -141,7 +141,28 @@ Plugin installation data is read from:
 - `~/.claude/plugins/installed_plugins.json` (includes `projectPath` for project/local scopes)
 - `~/.claude/plugins/known_marketplaces.json`
 
-Settings precedence: Local > Project > User
+### Settings Precedence
+
+**Precedence order: Local > Project > User** (per [Claude Code docs](https://code.claude.com/docs/en/settings#how-scopes-interact))
+
+When a plugin has settings in multiple scopes, the highest-priority scope wins:
+
+| Local Setting | Project Setting | User Setting | Result |
+|---------------|-----------------|--------------|--------|
+| `true` | any | any | **Enabled** (Local wins) |
+| `false` | any | any | **Disabled** (Local wins) |
+| none | `true` | any | **Enabled** (Project wins) |
+| none | `false` | any | **Disabled** (Project wins) |
+| none | none | `true` | **Enabled** (User wins) |
+| none | none | `false` | **Disabled** |
+| none | none | none | **Disabled** (no setting) |
+
+**Example**: If your team enables a plugin in `settings.json` (project), but you disable it in `settings.local.json` (local), the plugin will be **disabled** for you because local takes precedence.
+
+This allows you to:
+- Override team settings for personal preference
+- Test plugins locally before sharing with the team
+- Disable problematic plugins without affecting others
 
 ## Building from Source
 

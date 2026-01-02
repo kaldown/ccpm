@@ -133,6 +133,23 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ## Completed Features
 
+### Settings Precedence Bug Fix (2026-01-02)
+
+**Bug**: Local `false` didn't override Project `true`. CCPM incorrectly showed plugins as enabled when local settings explicitly disabled them.
+
+**Root cause**: `enabled_user/project/local` were `bool` fields where `false` meant both "no setting" and "explicitly disabled". The `is_enabled()` function only checked if a scope was `true`, ignoring explicit `false` settings.
+
+**Fix**:
+- Changed enabled fields from `bool` to `Option<bool>`
+- `None` = no setting in that scope (fall through to next)
+- `Some(true)` = explicitly enabled
+- `Some(false)` = explicitly disabled
+- Rewrote `is_enabled()` with correct precedence: Local > Project > User
+
+Files modified: `src/plugin/mod.rs`, `src/plugin/discovery.rs`, `src/app.rs`, `README.md`
+
+---
+
 ### A. Vim-style Lock File Handling (2026-01-02)
 
 Lock files (`settings.lock`, etc.) are now properly managed:
@@ -152,6 +169,7 @@ Files modified: `src/plugin/operations.rs`, `src/plugin/mod.rs`
 - [x] Search/filter plugins
 - [x] Detail modal
 - [x] Vim-style lock file handling (Feature A)
+- [x] Settings precedence bug fix (Local > Project > User)
 
 ---
 
