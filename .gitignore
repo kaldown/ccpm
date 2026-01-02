@@ -76,3 +76,6 @@ tarpaulin-report.html
 
 # Claude Code local settings
 .claude/
+
+# Auto Claude data directory
+.auto-claude/

@@ -2,6 +2,79 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation Hierarchy
+
+This project maintains structured documentation. **Read the appropriate files based on context needed.**
+
+### Committed Documentation (part of repo)
+
+| File | Purpose | When to Read | When to Update |
+|------|---------|--------------|----------------|
+| `CLAUDE.md` | Primary Claude context, high-to-mid level | Auto-read by Claude Code | After significant changes |
+| `docs/architecture.md` | Detailed architecture, data models, component hierarchy | When making architectural changes or need deep context | After structural/architectural changes |
+| `FEATURE_PLAN.md` | Feature tracking, planned/in-progress/completed | When planning work or checking status | After completing features |
+| `README.md` | User-facing documentation | When updating user-facing features | Only for significant user-visible changes |
+
+### Local Documentation (gitignored)
+
+| File | Purpose | When to Read |
+|------|---------|--------------|
+| `CLAUDE.local.md` | Low-level details, links, templates, preferences | When need ralph-loop setup, external links, implementation details |
+| `.claude/ralph-wiggum-docs.md` | Ralph-wiggum plugin reference | When running ralph-loops |
+| `.claude/ccpm-task-*.md` | Temporal task files | During active task execution |
+
+### Reading Order for Full Context
+
+1. `CLAUDE.md` (this file) - Always read first (auto-read)
+2. `docs/architecture.md` - For architectural understanding
+3. `FEATURE_PLAN.md` - For current work status
+4. `CLAUDE.local.md` - For low-level details and templates
+
+## Documentation Update Rules
+
+**After every significant change:**
+
+1. **Architectural changes** (new modules, data structures, component changes):
+   - Update `docs/architecture.md` with new/modified structures
+   - Update `CLAUDE.md` if it affects high-level understanding
+
+2. **Feature completion**:
+   - Update `FEATURE_PLAN.md` - move to completed section
+   - Update `CLAUDE.md` - remove from in-progress, add to completed if relevant
+   - Update `CLAUDE.local.md` - add implementation details
+   - Update `docs/architecture.md` - if new components/patterns added
+
+3. **User-facing changes**:
+   - Update `README.md` - only significant user-visible changes
+   - Do NOT update for internal changes (lock files, scope selection UI)
+
+4. **Before next execution phase**:
+   - Verify all docs are current
+   - Clean up temporal artifacts (task files)
+   - Ensure no stale information remains
+
+## Artifact Cleanup Policy
+
+**Temporal artifacts** (task files, phase-specific context files) MUST be cleaned up after task completion.
+
+### What are temporal artifacts?
+- `.claude/ccpm-task-*.md` - Ralph-loop task files (deleted after task completion)
+- Phase-specific context files that duplicate info now in permanent docs
+- Any file created for a specific task that won't be needed for future context
+
+### Cleanup behavior:
+1. After completing a task, check for redundant/temporal files
+2. Verify the file's content is captured in permanent docs (CLAUDE.md, CLAUDE.local.md, FEATURE_PLAN.md)
+3. **Ask the user** to confirm deletion: "Task complete. The following temporal files can be removed: [list]. Confirm?"
+4. Delete confirmed files
+5. Do NOT delete files that may be needed for future phases or contain unique context
+
+### Permanent files (never auto-delete):
+- `CLAUDE.md`, `CLAUDE.local.md` - Project context
+- `FEATURE_PLAN.md` - Feature tracking
+- `README.md` - User documentation
+- Source code and tests
+
 ## Build & Development Commands
 
 ```bash
@@ -99,3 +172,39 @@ Settings precedence: Local > Project > User
 Unit tests are co-located in each module. Integration tests in `tests/integration.rs` exercise CLI commands via `assert_cmd`.
 
 MSRV is Rust 1.70.
+
+## In-Progress Features
+
+See `FEATURE_PLAN.md` for full details. Context files in `.claude/` directory.
+
+### Lock File Handling (Feature A)
+
+**Problem**: Lock files (`settings.lock`) created but never deleted, leaving stale files.
+
+**Solution**:
+- `LockFileGuard` struct deletes lock on Drop
+- Lock file contains JSON with PID + timestamp
+- Stale lock detection (check if PID still running)
+- `LockConflict` error for active locks
+
+**Key files**: `src/plugin/operations.rs`, `src/plugin/mod.rs`
+
+### Scope Selection (Feature B)
+
+**Problem**: Toggle uses `install_scope`, may create unwanted `settings.json`.
+
+**Solution**:
+- `ScopeSelectionMode` enum: Modal, Inline, Keybinding (compile-time const)
+- Keybindings: `u`/`p`/`l` for direct scope enable
+- `AppMode::ScopeSelect` for dialog state
+- Enter triggers scope selection instead of direct toggle
+
+**Key files**: `src/app.rs`, `src/ui/dialogs.rs`, `src/main.rs`
+
+### Important Design Decision
+
+**Installation vs Enabling are separate concerns:**
+- `installed_plugins.json` tracks WHERE plugin files live (never modified on enable/disable)
+- `settings.json` files track WHERE plugins are enabled (modified on enable/disable)
+
+A plugin installed at any scope can be enabled at any scope independently.
