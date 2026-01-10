@@ -44,6 +44,140 @@ On first run (or when no default set):
 
 ## Planned Features
 
+### 0. Project Initialization (`ccpm init`)
+
+**Status**: Not implemented
+**Priority**: High
+**Rationale**: Streamline Claude Code onboarding by bootstrapping project configuration with recommended settings.
+
+#### Problem
+Setting up Claude Code for a new project requires manually:
+- Creating `.claude/` directory structure
+- Copying hooks from other projects or documentation
+- Configuring sandbox permissions
+- Installing and enabling recommended plugins
+- Setting up project-specific configuration
+
+This is time-consuming and error-prone, especially for teams onboarding multiple projects.
+
+#### Proposed Solution
+Add `ccpm init` command to bootstrap a project with recommended Claude Code configuration:
+
+```bash
+ccpm init .                    # Initialize current directory
+ccpm init /path/to/project     # Initialize specific project
+ccpm init --template rust      # Use Rust project template
+ccpm init --interactive        # Interactive setup wizard
+```
+
+#### What Gets Initialized
+
+1. **Directory Structure**
+   - `.claude/` directory
+   - `.claude/settings.json` (project-scope)
+   - `.gitignore` entry for `settings.local.json`
+
+2. **Hooks** (optional, user-selected)
+   - Pre-commit hooks (linting, formatting checks)
+   - User prompt submit hooks (validation, safety checks)
+   - Example hooks from common workflows
+
+3. **Plugins** (optional, user-selected)
+   - Language-specific plugins (rust-analyzer-lsp, python-lsp, etc.)
+   - Common workflow plugins (feature-dev, debugging-toolkit, etc.)
+   - Project-specific recommendations based on detected tech stack
+
+4. **Sandbox Configuration**
+   - Filesystem allowlist patterns (workspace, build dirs, temp dirs)
+   - Network allowlist (package registries, docs sites)
+   - Unix socket permissions (Docker, etc.)
+
+5. **Documentation**
+   - `CLAUDE.md` template with project context instructions, including:
+     - Essential Claude Code usage hints (e.g., "Use context7 for library documentation")
+     - Required plugins for this project type with rationale
+     - Project-specific conventions and patterns
+     - Build/test commands
+     - Architecture overview placeholders
+   - `.claude/README.md` explaining the configuration
+
+#### Implementation Options
+
+**Option A: Template-based (Recommended)**
+- Ship predefined templates for common project types (Rust, Python, Node.js, etc.)
+- Templates stored in `~/.claude/ccpm/templates/` or embedded in binary
+- Users can create custom templates in `~/.claude/ccpm/templates/custom/`
+
+**Option B: Interactive Wizard**
+- Detect project type from files (Cargo.toml, package.json, requirements.txt)
+- Ask questions: "Enable pre-commit hooks? (y/n)"
+- Build configuration interactively
+
+**Option C: Hybrid (Best UX)**
+- Detect project type automatically
+- Offer template as default: "Detected Rust project. Use Rust template? (Y/n)"
+- Allow interactive customization: `--interactive` flag
+- Allow template selection: `--template <name>` flag
+
+#### Template Structure
+
+```
+~/.claude/ccpm/templates/
+├── rust/
+│   ├── settings.json
+│   ├── hooks/
+│   │   └── user-prompt-submit.sh
+│   ├── plugins.txt          # List of recommended plugin IDs
+│   ├── sandbox.json         # Sandbox configuration snippet
+│   └── CLAUDE.md            # Template with placeholders
+├── python/
+│   └── ...
+└── node/
+    └── ...
+```
+
+#### CLI Interface
+
+```bash
+# Basic usage
+ccpm init .
+
+# Outputs:
+# Initializing Claude Code project...
+# ✓ Created .claude/ directory
+# ✓ Created .claude/settings.json
+# ✓ Added .claude/settings.local.json to .gitignore
+#
+# Install recommended plugins? (y/N): y
+# [1] rust-analyzer-lsp - LSP support for Rust
+# [2] feature-dev - Guided feature development
+# Select plugins (comma-separated numbers or 'all'): 1,2
+# ✓ Added plugins to settings.json (run 'claude plugin install' to install)
+#
+# Set up pre-commit hooks? (y/N): y
+# ✓ Created .claude/hooks/user-prompt-submit.sh
+#
+# Configure sandbox? (y/N): y
+# ✓ Added sandbox configuration to settings.json
+#
+# Initialization complete!
+# Run 'claude plugin install' to install enabled plugins.
+```
+
+#### Files Modified
+- `src/cli/mod.rs` - Add `init` subcommand
+- `src/cli/init.rs` - New module for init logic
+- `src/plugin/templates.rs` - Template management
+- `Cargo.toml` - Possibly add `include_dir` for embedded templates
+
+#### Future Enhancements
+- Remote templates: `ccpm init --template github:user/repo`
+- Team templates: Share templates via git
+- Template validation and linting
+- Update existing projects: `ccpm init --update` (merge new recommendations)
+
+---
+
 ### 1. Development Plugin Support
 
 **Status**: Not implemented
@@ -128,6 +262,35 @@ Compare installed versions against marketplace versions, show update availabilit
 **Priority**: Low
 
 Provide interface to control plugin installation and deletion from plugin manager.
+
+---
+
+### 6. Local enabledPlugins Override for User-Scope Plugins
+
+**Status**: Not implemented
+**Priority**: Medium
+
+**Problem**: User-scope plugins only read their enabled state from `~/.claude/settings.json`. Local `settings.local.json` overrides in a project directory are ignored for user-scope plugins.
+
+**Current behavior**:
+```
+# For a user-scope plugin like rust-analyzer-lsp:
+~/.claude/settings.json: enabledPlugins["rust-analyzer-lsp"] = false
+./.claude/settings.local.json: enabledPlugins["rust-analyzer-lsp"] = true
+
+# Result: rust-analyzer-lsp shows as DISABLED (user setting wins, local ignored)
+```
+
+**Expected behavior**: Local settings should override user settings regardless of where the plugin is installed.
+
+**Use case**: A Python developer wants Python plugins globally enabled but wants to disable them for a specific Rust project, using local settings overrides.
+
+**Implementation**:
+1. In `PluginDiscovery::discover_all()`, always load CWD's local/project settings
+2. For user-scope plugins, apply precedence: Local (CWD) > Project (CWD) > User
+3. Update debug output to show when local overrides are being applied
+
+**Note**: This differs from the current cross-project isolation fix. That fix ensures plugins installed in Project A read settings from Project A. This feature would allow the current project (CWD) to override settings for any plugin, regardless of install scope.
 
 ---
 
