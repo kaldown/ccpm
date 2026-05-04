@@ -177,14 +177,10 @@ with:
 
 ```rust
 let (plugin_enabled_project, plugin_enabled_local) = match install_scope {
-    Scope::User => {
-        // User-scope plugins still pick up CWD project/local overrides
-        // (Local > Project > User precedence applies in is_enabled()).
-        (
-            cwd_project_enabled.get(id).copied(),
-            cwd_local_enabled.get(id).copied(),
-        )
-    }
+    Scope::User => (
+        cwd_project_enabled.get(id).copied(),
+        cwd_local_enabled.get(id).copied(),
+    ),
     Scope::Project | Scope::Local => {
 ```
 
@@ -198,7 +194,42 @@ cargo test --lib plugin::discovery
 
 Expected: all tests pass, including the three new ones and the existing `test_cross_project_settings_isolation`.
 
-- [ ] **Step 5: Run full test suite + lints**
+- [ ] **Step 5: Update the now-misleading existing test**
+
+`src/plugin/discovery.rs:441-471` defines `test_user_scope_ignores_project_settings` whose docstring says "User scope plugins should not have project/local settings applied (they are global, not tied to any project)." The discovery fix invalidates that statement. The test's assertions still hold (it constructs a Plugin manually), but the name and comments now lie.
+
+Replace lines 441-471 with:
+
+```rust
+#[test]
+fn test_user_scope_with_only_user_setting_is_enabled() {
+    // After the discovery fix, user-scope plugins also pick up project/local
+    // overrides from CWD. This test covers the simple case where no overrides
+    // are present and only the user-scope setting applies.
+    let plugin = Plugin {
+        id: "test@marketplace".to_string(),
+        name: "test".to_string(),
+        marketplace: "marketplace".to_string(),
+        description: None,
+        version: None,
+        author: None,
+        install_scope: Scope::User,
+        install_path: None,
+        project_path: None,
+        is_current_project: true,
+        enabled_user: Some(true),
+        enabled_project: None,
+        enabled_local: None,
+        installed_at: None,
+        last_updated: None,
+    };
+
+    assert!(plugin.is_enabled());
+    assert_eq!(plugin.effective_scope(), Some("User"));
+}
+```
+
+- [ ] **Step 6: Run full test suite + lints**
 
 ```bash
 cargo test && cargo clippy -- -D warnings && cargo fmt --check
@@ -206,7 +237,7 @@ cargo test && cargo clippy -- -D warnings && cargo fmt --check
 
 Expected: green on all three.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/plugin/discovery.rs
@@ -372,40 +403,44 @@ new keybindings (l/p/u and the repurposed Enter/Space/e/d) call into."
 
 ---
 
-## Task 3: Add scope-aware action methods on `App`
+## Task 3: Add `Plugin::set_enabled` helper + scope-aware `App` methods
 
-**Why:** `app.rs` exposes `toggle_selected_plugin`, `enable_selected_plugin`, `disable_selected_plugin` — all hardcoded to `install_scope`. We add scope-explicit variants and update local plugin state mirroring on success.
+**Why:** `app.rs` exposes `toggle_selected_plugin`, `enable_selected_plugin`, `disable_selected_plugin` — all hardcoded to `install_scope`. We add scope-explicit variants. To kill the per-scope `match scope { Scope::User => p.enabled_user = ..., ... }` block that would otherwise be repeated 3× across the new App methods (and was already triplicated in the old ones), add a `Plugin::set_enabled(scope, value)` helper.
 
 **Files:**
-- Modify: `src/app.rs` (add three new methods; keep the old ones for now — they'll be removed in Task 4 once main.rs is updated)
+- Modify: `src/plugin/mod.rs` (add `Plugin::set_enabled`)
+- Modify: `src/app.rs` (add three new methods; old ones removed in Task 4 once main.rs is updated)
 
-**Note:** No new unit tests in this task — `App` is integration-tested through CLI/TUI behavior. The underlying logic is already covered by Task 2's `toggle_at_scope` tests. Adding `App` unit tests would require breaking the implicit `PluginService::new()` dependency, which is out of scope.
+- [ ] **Step 1: Add `Plugin::set_enabled` helper**
 
-- [ ] **Step 1: Add new scope-aware methods to `App`**
+In `src/plugin/mod.rs`, add to `impl Plugin` (near `is_enabled` around line 117):
 
-In `src/app.rs`, add these methods inside `impl App` (after the existing `disable_selected_plugin` method, around line 254):
+```rust
+pub fn set_enabled(&mut self, scope: Scope, value: Option<bool>) {
+    match scope {
+        Scope::User => self.enabled_user = value,
+        Scope::Project => self.enabled_project = value,
+        Scope::Local => self.enabled_local = value,
+    }
+}
+```
+
+- [ ] **Step 2: Add new scope-aware methods to `App`**
+
+In `src/app.rs`, add these inside `impl App` (after the existing `disable_selected_plugin` method, around line 254):
 
 ```rust
 pub fn toggle_selected_at_scope(&mut self, scope: Scope) {
-    let Some(plugin) = self.selected_plugin() else {
-        return;
-    };
-    let id = plugin.id.clone();
-    // Clone the plugin snapshot so we can re-borrow self mutably below.
-    let plugin_snapshot = plugin.clone();
+    let Some(snapshot) = self.selected_plugin().cloned() else { return; };
 
-    match self.service.toggle_at_scope(&plugin_snapshot, scope) {
+    match self.service.toggle_at_scope(&snapshot, scope) {
         Ok(new_state) => {
-            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                match scope {
-                    Scope::User => p.enabled_user = Some(new_state),
-                    Scope::Project => p.enabled_project = Some(new_state),
-                    Scope::Local => p.enabled_local = Some(new_state),
-                }
+            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                p.set_enabled(scope, Some(new_state));
             }
             self.message = Some(StatusMessage::info(format!(
                 "{} {} in {} scope",
-                id,
+                snapshot.id,
                 if new_state { "enabled" } else { "disabled" },
                 scope
             )));
@@ -417,23 +452,15 @@ pub fn toggle_selected_at_scope(&mut self, scope: Scope) {
 }
 
 pub fn enable_selected_at_scope(&mut self, scope: Scope) {
-    let Some(plugin) = self.selected_plugin() else {
-        return;
-    };
-    let id = plugin.id.clone();
+    let Some(snapshot) = self.selected_plugin().cloned() else { return; };
 
-    match self.service.enable_plugin(&id, scope) {
+    match self.service.enable_plugin(&snapshot.id, scope) {
         Ok(()) => {
-            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                match scope {
-                    Scope::User => p.enabled_user = Some(true),
-                    Scope::Project => p.enabled_project = Some(true),
-                    Scope::Local => p.enabled_local = Some(true),
-                }
+            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                p.set_enabled(scope, Some(true));
             }
             self.message = Some(StatusMessage::info(format!(
-                "Enabled {} in {} scope",
-                id, scope
+                "Enabled {} in {} scope", snapshot.id, scope
             )));
         }
         Err(e) => {
@@ -443,23 +470,15 @@ pub fn enable_selected_at_scope(&mut self, scope: Scope) {
 }
 
 pub fn disable_selected_at_scope(&mut self, scope: Scope) {
-    let Some(plugin) = self.selected_plugin() else {
-        return;
-    };
-    let id = plugin.id.clone();
+    let Some(snapshot) = self.selected_plugin().cloned() else { return; };
 
-    match self.service.disable_plugin(&id, scope) {
+    match self.service.disable_plugin(&snapshot.id, scope) {
         Ok(()) => {
-            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == id) {
-                match scope {
-                    Scope::User => p.enabled_user = Some(false),
-                    Scope::Project => p.enabled_project = Some(false),
-                    Scope::Local => p.enabled_local = Some(false),
-                }
+            if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                p.set_enabled(scope, Some(false));
             }
             self.message = Some(StatusMessage::info(format!(
-                "Disabled {} in {} scope",
-                id, scope
+                "Disabled {} in {} scope", snapshot.id, scope
             )));
         }
         Err(e) => {
@@ -469,34 +488,36 @@ pub fn disable_selected_at_scope(&mut self, scope: Scope) {
 }
 ```
 
-`Plugin` already derives `Clone` (`src/plugin/mod.rs:84`), so the `clone()` call is free of new derives.
+`Plugin` already derives `Clone` (`src/plugin/mod.rs:84`), so `cloned()` requires no new derives. The `let-else` early returns + `set_enabled` shave each method to ~12 lines vs the old ~25.
 
-- [ ] **Step 2: Verify the build**
+- [ ] **Step 3: Verify the build**
 
 ```bash
 cargo build
 ```
 
-Expected: clean build. The new methods add to `App`'s API; existing methods are still present.
+Expected: clean build. The new methods extend `App`'s API; the existing methods are still present.
 
-- [ ] **Step 3: Lints + test suite**
+- [ ] **Step 4: Lints + test suite**
 
 ```bash
 cargo test && cargo clippy -- -D warnings && cargo fmt --check
 ```
 
-Expected: green.
+Expected: green. The `App` struct is `pub` (re-exported in `lib.rs`), so the new methods are not flagged as `dead_code` even before main.rs starts calling them.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/app.rs
-git commit -m "Add scope-aware enable/disable/toggle methods to App
+git add src/plugin/mod.rs src/app.rs
+git commit -m "Add Plugin::set_enabled and scope-aware App action methods
 
-Mirrors the existing scope-agnostic helpers but takes an explicit Scope
-argument. Used by the new keybindings in main.rs (next task). The old
-install_scope-targeting helpers are retained until main.rs no longer
-references them; they will be removed in the keybinding task."
+Plugin::set_enabled(scope, value) replaces the per-scope match block
+that was triplicated across the old App helpers and would otherwise be
+quintuplicated. Three new App methods (toggle/enable/disable
+_selected_at_scope) take an explicit Scope and use the helper. The old
+install_scope-targeting methods stay around until main.rs no longer
+references them — removed in the keybinding task."
 ```
 
 ---
@@ -524,18 +545,15 @@ fn handle_normal_mode(app: &mut App, key: KeyCode) {
         KeyCode::Char('g') => app.select_first(),
         KeyCode::Char('G') => app.select_last(),
 
-        // Default per-project actions (target Local scope)
+        // Plugin actions (default scope = Local)
         KeyCode::Char('e') => app.enable_selected_at_scope(Scope::Local),
         KeyCode::Char('d') => app.disable_selected_at_scope(Scope::Local),
         KeyCode::Char(' ') | KeyCode::Char('l') | KeyCode::Enter => {
             app.toggle_selected_at_scope(Scope::Local)
         }
-
-        // Explicit scope toggles
         KeyCode::Char('p') => app.toggle_selected_at_scope(Scope::Project),
         KeyCode::Char('u') => app.toggle_selected_at_scope(Scope::User),
 
-        // Detail modal moved from Enter to 'i' (info)
         KeyCode::Char('i') => app.show_detail_modal(),
 
         KeyCode::Char('x') => app.confirm_remove(),
@@ -576,7 +594,6 @@ fn handle_detail_modal_mode(app: &mut App, key: KeyCode) {
 
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('i') => app.hide_detail_modal(),
-        // Toggle from inside the modal — same defaults as Normal mode (Local scope)
         KeyCode::Char(' ') | KeyCode::Char('l') | KeyCode::Enter => {
             app.toggle_selected_at_scope(Scope::Local)
         }
@@ -589,14 +606,14 @@ fn handle_detail_modal_mode(app: &mut App, key: KeyCode) {
 }
 ```
 
-- [ ] **Step 3: Remove unused App methods**
+- [ ] **Step 3: Remove the now-unused old methods**
 
-In `src/app.rs`, delete the now-unreferenced methods:
+In `src/app.rs`, delete:
 - `toggle_selected_plugin` (lines ~170-197)
 - `enable_selected_plugin` (lines ~199-225)
 - `disable_selected_plugin` (lines ~227-253)
 
-These are replaced by the scope-aware versions added in Task 3.
+In `src/plugin/operations.rs`, delete `PluginService::toggle_plugin` (lines ~76-80). It was the only caller for the in-memory `is_enabled()` flip-and-write pattern via `install_scope`, and the new `toggle_at_scope` replaces it. Without `app.toggle_selected_plugin` as a caller, the method becomes dead.
 
 - [ ] **Step 4: Update the footer hint strings in `src/ui/mod.rs`**
 
@@ -650,7 +667,7 @@ Inside the TUI, in the project root:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/main.rs src/app.rs src/ui/mod.rs
+git add src/main.rs src/app.rs src/ui/mod.rs src/plugin/operations.rs
 git commit -m "Wire per-scope plugin toggle keybindings (Approach 1)
 
 Default per-project keys (Enter, Space, l, e, d) now write to the Local
@@ -658,8 +675,9 @@ scope of the current working directory. Explicit scope keys u and p
 write to User and Project respectively. Detail modal moves from Enter
 to i (info).
 
-The old install_scope-targeting App methods are removed; main.rs uses
-the scope-aware variants added in the previous commit."
+The old install_scope-targeting App methods and PluginService::toggle_plugin
+are removed; main.rs uses the scope-aware variants from the previous
+commit."
 ```
 
 ---
@@ -817,7 +835,6 @@ fn format_setting(value: Option<bool>) -> Span<'static> {
 In `render_details`, after the existing "Enabled in" line block (lines ~48-54) and before the project-path block (line ~57), insert:
 
 ```rust
-        // Per-scope settings breakdown
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             "Settings:",
@@ -1353,16 +1370,4 @@ If everything looks right, the feature is shippable.
 
 ## What this plan does NOT do (and shouldn't)
 
-These are deferred per the spec. Do not pull them in:
-
-- **Walk-up project root discovery** from CWD (Scope 1)
-- **`--project <path>` flag** (Scope 1)
-- **`~/.config/ccpm/config.toml`** with `projects_root` (ships with multi-project view)
-- **Multi-project dashboard scanning `~/Projects/*`** (feature C, backlog)
-- **Profiles / presets** (feature D, backlog)
-- **Hygiene features** (bulk select, decision-support columns) (feature A, deprioritized)
-- **`Shift+l` / `d` to remove an override** (3-state cycle)
-- **Modal scope-picker dialog** (Approach 2; the existing const + enum + AppMode::ScopeSelect were design notes that never landed in source — do not implement them now)
-- **`~/.claude/plugins/cache/` invalidation** (undocumented; only revisit if testing surfaces a stale-state bug)
-
-If any of these become tempting during implementation, stop and ask first.
+The complete deferred list lives in spec §3 ("Explicitly out of scope"): `docs/superpowers/specs/2026-05-04-per-project-plugin-scoping-design.md#3-goals-and-non-goals`. If something below sounds tempting during implementation — walk-up project discovery, `--project` flag, multi-project view, profiles, modal scope picker, cache invalidation — stop and re-read the spec rather than expanding the plan. Single source of truth: the spec.
