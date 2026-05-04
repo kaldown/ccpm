@@ -53,7 +53,8 @@ impl PluginDiscovery {
         }
 
         // Cache for settings loaded from other project directories
-        let mut project_settings_cache: HashMap<PathBuf, (Option<Settings>, Option<Settings>)> = HashMap::new();
+        let mut project_settings_cache: HashMap<PathBuf, (Option<Settings>, Option<Settings>)> =
+            HashMap::new();
 
         // Build plugin list from installed plugins
         for (id, entries) in &installed.plugins {
@@ -88,21 +89,27 @@ impl PluginDiscovery {
 
                 // CRITICAL FIX: Load settings from the PLUGIN's project, not CWD
                 let (plugin_enabled_project, plugin_enabled_local) = match install_scope {
-                    Scope::User => {
-                        // User scope: no project/local settings apply
-                        (None, None)
-                    }
+                    Scope::User => (
+                        cwd_project_enabled.get(id).copied(),
+                        cwd_local_enabled.get(id).copied(),
+                    ),
                     Scope::Project | Scope::Local => {
                         // Project/Local scope: read from PLUGIN's project, not CWD
                         if let Some(ref proj_path) = entry.project_path {
                             // Get or load settings for this project
                             let (proj_settings, local_settings) = project_settings_cache
                                 .entry(proj_path.clone())
-                                .or_insert_with(|| ConfigPaths::load_settings_from_project(proj_path));
+                                .or_insert_with(|| {
+                                    ConfigPaths::load_settings_from_project(proj_path)
+                                });
 
                             (
-                                proj_settings.as_ref().and_then(|s| s.enabled_plugins.get(id).copied()),
-                                local_settings.as_ref().and_then(|s| s.enabled_plugins.get(id).copied()),
+                                proj_settings
+                                    .as_ref()
+                                    .and_then(|s| s.enabled_plugins.get(id).copied()),
+                                local_settings
+                                    .as_ref()
+                                    .and_then(|s| s.enabled_plugins.get(id).copied()),
                             )
                         } else {
                             // Fallback to CWD if no project_path (shouldn't happen for new installs)
@@ -395,8 +402,8 @@ mod tests {
             project_path: None,
             is_current_project: true,
             enabled_user: None,
-            enabled_project: Some(true),  // Project says enabled
-            enabled_local: Some(false),   // Local says disabled
+            enabled_project: Some(true), // Project says enabled
+            enabled_local: Some(false),  // Local says disabled
             installed_at: None,
             last_updated: None,
         };
@@ -438,9 +445,10 @@ mod tests {
     }
 
     #[test]
-    fn test_user_scope_ignores_project_settings() {
-        // User scope plugins should not have project/local settings applied
-        // (they are global, not tied to any project)
+    fn test_user_scope_with_only_user_setting_is_enabled() {
+        // After the discovery fix, user-scope plugins also pick up project/local
+        // overrides from CWD. This test covers the simple case where no overrides
+        // are present and only the user-scope setting applies.
         let plugin = Plugin {
             id: "test@marketplace".to_string(),
             name: "test".to_string(),
@@ -448,26 +456,19 @@ mod tests {
             description: None,
             version: None,
             author: None,
-            install_scope: Scope::User, // User scope!
+            install_scope: Scope::User,
             install_path: None,
             project_path: None,
             is_current_project: true,
-            enabled_user: Some(true),  // Only user setting matters
-            enabled_project: None,     // Should be None for user-scope plugins
-            enabled_local: None,       // Should be None for user-scope plugins
+            enabled_user: Some(true),
+            enabled_project: None,
+            enabled_local: None,
             installed_at: None,
             last_updated: None,
         };
 
-        assert!(
-            plugin.is_enabled(),
-            "User-scope plugin enabled in user settings should be enabled"
-        );
-        assert_eq!(
-            plugin.effective_scope(),
-            Some("User"),
-            "Effective scope should be User"
-        );
+        assert!(plugin.is_enabled());
+        assert_eq!(plugin.effective_scope(), Some("User"));
     }
 
     #[test]
@@ -478,7 +479,144 @@ mod tests {
 
         let (proj_settings, local_settings) = ConfigPaths::load_settings_from_project(&fake_path);
 
-        assert!(proj_settings.is_none(), "Should be None for non-existent project");
-        assert!(local_settings.is_none(), "Should be None for non-existent local");
+        assert!(
+            proj_settings.is_none(),
+            "Should be None for non-existent project"
+        );
+        assert!(
+            local_settings.is_none(),
+            "Should be None for non-existent local"
+        );
+    }
+
+    fn write_user_settings(user_dir: &Path, plugins: &[(&str, bool)]) {
+        let mut enabled = serde_json::Map::new();
+        for (id, on) in plugins {
+            enabled.insert(id.to_string(), serde_json::Value::Bool(*on));
+        }
+        let json = serde_json::json!({ "enabledPlugins": enabled });
+        fs::write(
+            user_dir.join("settings.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_user_installed(user_dir: &Path, id: &str, scope: &str, install_path: &Path) {
+        let plugins_dir = user_dir.join("plugins");
+        fs::create_dir_all(&plugins_dir).unwrap();
+        let json = serde_json::json!({
+            "version": 2,
+            "plugins": {
+                id: [{
+                    "scope": scope,
+                    "installPath": install_path,
+                    "version": "1.0.0",
+                    "installedAt": "2026-01-01T00:00:00Z",
+                    "lastUpdated": "2026-01-01T00:00:00Z"
+                }]
+            }
+        });
+        fs::write(
+            plugins_dir.join("installed_plugins.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_user_scope_plugin_picks_up_cwd_local_override() {
+        let user_dir = TempDir::new().unwrap();
+        let project_dir = TempDir::new().unwrap();
+        let install_path = TempDir::new().unwrap();
+
+        write_user_settings(user_dir.path(), &[("test@marketplace", true)]);
+        write_user_installed(
+            user_dir.path(),
+            "test@marketplace",
+            "user",
+            install_path.path(),
+        );
+
+        create_test_local_settings(project_dir.path(), &[("test@marketplace", false)]);
+
+        let paths = ConfigPaths {
+            user_dir: user_dir.path().to_path_buf(),
+            local_dir: project_dir.path().join(".claude"),
+        };
+
+        let plugins = PluginDiscovery::with_paths(paths).discover_all().unwrap();
+        let plugin = plugins
+            .iter()
+            .find(|p| p.id == "test@marketplace")
+            .expect("user-scope plugin should be discovered");
+
+        assert_eq!(plugin.enabled_user, Some(true));
+        assert_eq!(
+            plugin.enabled_local,
+            Some(false),
+            "CWD local override must populate enabled_local for user-scope plugins"
+        );
+        assert!(!plugin.is_enabled(), "Local=false must override User=true");
+    }
+
+    #[test]
+    fn test_user_scope_plugin_picks_up_cwd_project_override() {
+        let user_dir = TempDir::new().unwrap();
+        let project_dir = TempDir::new().unwrap();
+        let install_path = TempDir::new().unwrap();
+
+        write_user_settings(user_dir.path(), &[("test@marketplace", true)]);
+        write_user_installed(
+            user_dir.path(),
+            "test@marketplace",
+            "user",
+            install_path.path(),
+        );
+
+        create_test_settings(project_dir.path(), &[("test@marketplace", false)]);
+
+        let paths = ConfigPaths {
+            user_dir: user_dir.path().to_path_buf(),
+            local_dir: project_dir.path().join(".claude"),
+        };
+
+        let plugins = PluginDiscovery::with_paths(paths).discover_all().unwrap();
+        let plugin = plugins.iter().find(|p| p.id == "test@marketplace").unwrap();
+
+        assert_eq!(plugin.enabled_project, Some(false));
+        assert_eq!(plugin.enabled_local, None);
+        assert!(
+            !plugin.is_enabled(),
+            "Project=false must override User=true"
+        );
+    }
+
+    #[test]
+    fn test_user_scope_plugin_no_cwd_overrides_unchanged() {
+        let user_dir = TempDir::new().unwrap();
+        let project_dir = TempDir::new().unwrap(); // no .claude/ inside
+        let install_path = TempDir::new().unwrap();
+
+        write_user_settings(user_dir.path(), &[("test@marketplace", true)]);
+        write_user_installed(
+            user_dir.path(),
+            "test@marketplace",
+            "user",
+            install_path.path(),
+        );
+
+        let paths = ConfigPaths {
+            user_dir: user_dir.path().to_path_buf(),
+            local_dir: project_dir.path().join(".claude"),
+        };
+
+        let plugins = PluginDiscovery::with_paths(paths).discover_all().unwrap();
+        let plugin = plugins.iter().find(|p| p.id == "test@marketplace").unwrap();
+
+        assert_eq!(plugin.enabled_user, Some(true));
+        assert_eq!(plugin.enabled_project, None);
+        assert_eq!(plugin.enabled_local, None);
+        assert!(plugin.is_enabled());
     }
 }
