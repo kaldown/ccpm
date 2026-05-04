@@ -516,9 +516,8 @@ mod tests {
         let mut plugin = make_plugin("p@m", Scope::User);
         plugin.enabled_user = Some(true); // effective: enabled
 
-        // Local is None; first press should write Local=false (flips effective state)
         let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
-        assert_eq!(new_state, false);
+        assert!(!new_state);
 
         let written = serde_json::from_str::<Settings>(
             &fs::read_to_string(service.paths.local_settings()).unwrap(),
@@ -532,9 +531,8 @@ mod tests {
         let (_temp, service) = setup_test_env();
         let plugin = make_plugin("p@m", Scope::User); // no settings anywhere
 
-        // is_enabled() == false; first press should write Local=true
         let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
-        assert_eq!(new_state, true);
+        assert!(new_state);
     }
 
     #[test]
@@ -544,7 +542,7 @@ mod tests {
         plugin.enabled_local = Some(true);
 
         let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
-        assert_eq!(new_state, false);
+        assert!(!new_state);
     }
 
     #[test]
