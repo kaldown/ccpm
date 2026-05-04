@@ -446,9 +446,8 @@ mod tests {
 
     #[test]
     fn test_user_scope_with_only_user_setting_is_enabled() {
-        // After the discovery fix, user-scope plugins also pick up project/local
-        // overrides from CWD. This test covers the simple case where no overrides
-        // are present and only the user-scope setting applies.
+        // Regression guard: User arm must still fall through to is_enabled()
+        // when no CWD overrides exist.
         let plugin = Plugin {
             id: "test@marketplace".to_string(),
             name: "test".to_string(),
@@ -467,8 +466,15 @@ mod tests {
             last_updated: None,
         };
 
-        assert!(plugin.is_enabled());
-        assert_eq!(plugin.effective_scope(), Some("User"));
+        assert!(
+            plugin.is_enabled(),
+            "user-scope plugin with User=true should be enabled when no overrides exist"
+        );
+        assert_eq!(
+            plugin.effective_scope(),
+            Some("User"),
+            "effective scope should be User when only enabled_user is set"
+        );
     }
 
     #[test]
@@ -582,7 +588,10 @@ mod tests {
         };
 
         let plugins = PluginDiscovery::with_paths(paths).discover_all().unwrap();
-        let plugin = plugins.iter().find(|p| p.id == "test@marketplace").unwrap();
+        let plugin = plugins
+            .iter()
+            .find(|p| p.id == "test@marketplace")
+            .expect("user-scope plugin should be discovered");
 
         assert_eq!(plugin.enabled_project, Some(false));
         assert_eq!(plugin.enabled_local, None);
@@ -612,7 +621,10 @@ mod tests {
         };
 
         let plugins = PluginDiscovery::with_paths(paths).discover_all().unwrap();
-        let plugin = plugins.iter().find(|p| p.id == "test@marketplace").unwrap();
+        let plugin = plugins
+            .iter()
+            .find(|p| p.id == "test@marketplace")
+            .expect("user-scope plugin should be discovered");
 
         assert_eq!(plugin.enabled_user, Some(true));
         assert_eq!(plugin.enabled_project, None);
