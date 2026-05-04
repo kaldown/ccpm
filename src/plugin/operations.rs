@@ -72,13 +72,6 @@ impl PluginService {
         self.set_plugin_enabled(id, scope, false)
     }
 
-    /// Toggle plugin enabled state
-    pub fn toggle_plugin(&self, plugin: &Plugin) -> Result<bool> {
-        let new_state = !plugin.is_enabled();
-        self.set_plugin_enabled(&plugin.id, plugin.install_scope, new_state)?;
-        Ok(new_state)
-    }
-
     /// Toggle a plugin's enabled state in a specific scope.
     ///
     /// If that scope has no setting yet, first press flips the effective state

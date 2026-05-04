@@ -78,6 +78,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> 
 }
 
 fn handle_normal_mode(app: &mut App, key: KeyCode) {
+    use ccpm::plugin::Scope;
+
     match key {
         // Navigation
         KeyCode::Char('j') | KeyCode::Down => app.move_selection(1),
@@ -85,11 +87,17 @@ fn handle_normal_mode(app: &mut App, key: KeyCode) {
         KeyCode::Char('g') => app.select_first(),
         KeyCode::Char('G') => app.select_last(),
 
-        // Plugin actions
-        KeyCode::Char('e') => app.enable_selected_plugin(),
-        KeyCode::Char('d') => app.disable_selected_plugin(),
-        KeyCode::Char(' ') => app.toggle_selected_plugin(),
-        KeyCode::Enter => app.show_detail_modal(),
+        // Plugin actions (default scope = Local)
+        KeyCode::Char('e') => app.enable_selected_at_scope(Scope::Local),
+        KeyCode::Char('d') => app.disable_selected_at_scope(Scope::Local),
+        KeyCode::Char(' ') | KeyCode::Char('l') | KeyCode::Enter => {
+            app.toggle_selected_at_scope(Scope::Local)
+        }
+        KeyCode::Char('p') => app.toggle_selected_at_scope(Scope::Project),
+        KeyCode::Char('u') => app.toggle_selected_at_scope(Scope::User),
+
+        KeyCode::Char('i') => app.show_detail_modal(),
+
         KeyCode::Char('x') => app.confirm_remove(),
 
         // Filtering
@@ -142,12 +150,17 @@ fn handle_confirm_mode(app: &mut App, key: KeyCode) {
 }
 
 fn handle_detail_modal_mode(app: &mut App, key: KeyCode) {
+    use ccpm::plugin::Scope;
+
     match key {
-        KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => app.hide_detail_modal(),
-        // Allow toggle from modal
-        KeyCode::Char(' ') => app.toggle_selected_plugin(),
-        KeyCode::Char('e') => app.enable_selected_plugin(),
-        KeyCode::Char('d') => app.disable_selected_plugin(),
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('i') => app.hide_detail_modal(),
+        KeyCode::Char(' ') | KeyCode::Char('l') | KeyCode::Enter => {
+            app.toggle_selected_at_scope(Scope::Local)
+        }
+        KeyCode::Char('p') => app.toggle_selected_at_scope(Scope::Project),
+        KeyCode::Char('u') => app.toggle_selected_at_scope(Scope::User),
+        KeyCode::Char('e') => app.enable_selected_at_scope(Scope::Local),
+        KeyCode::Char('d') => app.disable_selected_at_scope(Scope::Local),
         _ => {}
     }
 }

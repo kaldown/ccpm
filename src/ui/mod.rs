@@ -127,10 +127,11 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let commands = match app.mode {
         AppMode::Normal => vec![
             ("j/k", "navigate"),
-            ("Enter", "details"),
-            ("e", "enable"),
-            ("d", "disable"),
-            ("s", "scope"),
+            ("Enter/l", "toggle (local)"),
+            ("p/u", "toggle (project/user)"),
+            ("e/d", "enable/disable"),
+            ("i", "details"),
+            ("s", "scope filter"),
             ("/", "search"),
             ("?", "help"),
             ("q", "quit"),
@@ -138,7 +139,11 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Search => vec![("Enter/Esc", "exit search"), ("Type", "filter")],
         AppMode::Help => vec![("Esc/?", "close help")],
         AppMode::Confirm(_) => vec![("y", "confirm"), ("n/Esc", "cancel")],
-        AppMode::DetailModal => vec![("Esc/Enter", "close"), ("Space", "toggle")],
+        AppMode::DetailModal => vec![
+            ("Esc/i", "close"),
+            ("Enter/l", "toggle (local)"),
+            ("p/u", "project/user"),
+        ],
     };
 
     let mut spans: Vec<Span> = Vec::new();
