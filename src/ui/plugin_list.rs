@@ -46,8 +46,15 @@ pub fn render_plugin_list(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::DarkGray),
             );
 
+            let override_marker = if plugin.has_override() {
+                Span::styled("↓", Style::default().fg(Color::Yellow))
+            } else {
+                Span::raw(" ")
+            };
+
             ListItem::new(Line::from(vec![
                 scope_indicator,
+                override_marker,
                 status_indicator,
                 name,
                 marketplace,

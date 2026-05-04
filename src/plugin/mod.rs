@@ -189,6 +189,16 @@ impl Plugin {
         }
     }
 
+    /// Returns true when any non-install-scope `enabled_*` field is set.
+    /// Used to render the "↓" override marker in the plugin list.
+    pub fn has_override(&self) -> bool {
+        match self.install_scope {
+            Scope::User => self.enabled_project.is_some() || self.enabled_local.is_some(),
+            Scope::Project => self.enabled_user.is_some() || self.enabled_local.is_some(),
+            Scope::Local => self.enabled_user.is_some() || self.enabled_project.is_some(),
+        }
+    }
+
     /// Returns the project path formatted relative to home directory
     pub fn project_path_display(&self) -> Option<String> {
         self.project_path.as_ref().map(|p| {
@@ -442,6 +452,42 @@ mod tests {
     #[test]
     fn test_scope_filter_default() {
         assert_eq!(ScopeFilter::default(), ScopeFilter::All);
+    }
+
+    #[test]
+    fn test_has_override_user_install() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::User;
+
+        // No settings anywhere → no override
+        assert!(!plugin.has_override());
+
+        // Only enabled_user (the install scope) → no override
+        plugin.enabled_user = Some(true);
+        assert!(!plugin.has_override());
+
+        // Add Project setting → override
+        plugin.enabled_project = Some(false);
+        assert!(plugin.has_override());
+
+        // Reset, add Local setting → override
+        plugin.enabled_project = None;
+        plugin.enabled_local = Some(true);
+        assert!(plugin.has_override());
+    }
+
+    #[test]
+    fn test_has_override_local_install() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::Local;
+        plugin.enabled_local = Some(true);
+
+        // Only the install scope is set → no override
+        assert!(!plugin.has_override());
+
+        // User setting is an override for a Local-installed plugin
+        plugin.enabled_user = Some(true);
+        assert!(plugin.has_override());
     }
 
     #[test]
