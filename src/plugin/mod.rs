@@ -127,6 +127,14 @@ impl Plugin {
         self.enabled_user.unwrap_or(false)
     }
 
+    pub fn set_enabled(&mut self, scope: Scope, value: Option<bool>) {
+        match scope {
+            Scope::User => self.enabled_user = value,
+            Scope::Project => self.enabled_project = value,
+            Scope::Local => self.enabled_local = value,
+        }
+    }
+
     /// Human-readable enabled context description
     /// Shows which scopes have explicit settings and their values
     pub fn enabled_context(&self) -> String {

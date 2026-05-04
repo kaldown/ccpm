@@ -252,6 +252,71 @@ impl App {
         }
     }
 
+    pub fn toggle_selected_at_scope(&mut self, scope: Scope) {
+        let Some(snapshot) = self.selected_plugin().cloned() else {
+            return;
+        };
+
+        match self.service.toggle_at_scope(&snapshot, scope) {
+            Ok(new_state) => {
+                if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                    p.set_enabled(scope, Some(new_state));
+                }
+                self.message = Some(StatusMessage::info(format!(
+                    "{} {} in {} scope",
+                    snapshot.id,
+                    if new_state { "enabled" } else { "disabled" },
+                    scope
+                )));
+            }
+            Err(e) => {
+                self.message = Some(StatusMessage::error(format!("Failed to toggle: {}", e)));
+            }
+        }
+    }
+
+    pub fn enable_selected_at_scope(&mut self, scope: Scope) {
+        let Some(snapshot) = self.selected_plugin().cloned() else {
+            return;
+        };
+
+        match self.service.enable_plugin(&snapshot.id, scope) {
+            Ok(()) => {
+                if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                    p.set_enabled(scope, Some(true));
+                }
+                self.message = Some(StatusMessage::info(format!(
+                    "Enabled {} in {} scope",
+                    snapshot.id, scope
+                )));
+            }
+            Err(e) => {
+                self.message = Some(StatusMessage::error(format!("Failed to enable: {}", e)));
+            }
+        }
+    }
+
+    pub fn disable_selected_at_scope(&mut self, scope: Scope) {
+        let Some(snapshot) = self.selected_plugin().cloned() else {
+            return;
+        };
+
+        match self.service.disable_plugin(&snapshot.id, scope) {
+            Ok(()) => {
+                if let Some(p) = self.plugins.iter_mut().find(|p| p.id == snapshot.id) {
+                    p.set_enabled(scope, Some(false));
+                }
+                self.message = Some(StatusMessage::info(format!(
+                    "Disabled {} in {} scope",
+                    snapshot.id, scope
+                )));
+            }
+            Err(e) => {
+                self.message = Some(StatusMessage::error(format!("Failed to disable: {}", e)));
+            }
+        }
+    }
+
     pub fn show_help(&mut self) {
         self.mode = AppMode::Help;
     }
