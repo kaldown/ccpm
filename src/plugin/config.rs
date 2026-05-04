@@ -151,7 +151,9 @@ impl ConfigPaths {
 impl ConfigPaths {
     /// Load settings from a specific project directory (not CWD).
     /// Used to read settings from the plugin's actual project, not the current working directory.
-    pub fn load_settings_from_project(project_path: &std::path::Path) -> (Option<Settings>, Option<Settings>) {
+    pub fn load_settings_from_project(
+        project_path: &std::path::Path,
+    ) -> (Option<Settings>, Option<Settings>) {
         let claude_dir = project_path.join(".claude");
 
         let project_settings = Self::load_settings_file(&claude_dir.join("settings.json"));

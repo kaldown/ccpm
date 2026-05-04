@@ -98,9 +98,9 @@ pub struct Plugin {
     // Enabled status (tracked separately for each scope)
     // None = no setting in that scope, Some(true) = enabled, Some(false) = disabled
     // Precedence: Local > Project > User (per Claude Code docs)
-    pub enabled_user: Option<bool>,    // Setting in ~/.claude/settings.json
+    pub enabled_user: Option<bool>, // Setting in ~/.claude/settings.json
     pub enabled_project: Option<bool>, // Setting in ./.claude/settings.json (project scope)
-    pub enabled_local: Option<bool>,   // Setting in ./.claude/settings.local.json
+    pub enabled_local: Option<bool>, // Setting in ./.claude/settings.local.json
 
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,

@@ -207,12 +207,11 @@ impl PluginService {
             pid: std::process::id(),
             timestamp: Utc::now(),
         };
-        let metadata_json = serde_json::to_string(&metadata).map_err(|e| {
-            PluginError::ConfigParseError {
+        let metadata_json =
+            serde_json::to_string(&metadata).map_err(|e| PluginError::ConfigParseError {
                 path: lock_path.clone(),
                 source: e,
-            }
-        })?;
+            })?;
 
         // Write metadata - use a separate file handle to avoid moving the locked file
         fs::write(&lock_path, metadata_json).map_err(|source| PluginError::ConfigWriteError {
@@ -348,7 +347,10 @@ mod tests {
 
         {
             let _guard = service.acquire_lock(&settings_path).unwrap();
-            assert!(lock_path.exists(), "Lock file should exist while guard is alive");
+            assert!(
+                lock_path.exists(),
+                "Lock file should exist while guard is alive"
+            );
         }
         // Guard dropped here
 
@@ -371,7 +373,10 @@ mod tests {
 
         // Should succeed because the PID is dead (stale lock)
         let guard = service.acquire_lock(&settings_path);
-        assert!(guard.is_ok(), "Should acquire lock when existing lock is stale");
+        assert!(
+            guard.is_ok(),
+            "Should acquire lock when existing lock is stale"
+        );
 
         // Verify the new lock has our PID
         let content = fs::read_to_string(&lock_path).unwrap();
@@ -418,11 +423,17 @@ mod tests {
 
         // Write a corrupted lock file (invalid JSON)
         fs::write(&lock_path, "this is not valid json").unwrap();
-        assert!(lock_path.exists(), "Corrupted lock file should exist before test");
+        assert!(
+            lock_path.exists(),
+            "Corrupted lock file should exist before test"
+        );
 
         // Should succeed because corrupted lock is treated as stale
         let guard = service.acquire_lock(&settings_path);
-        assert!(guard.is_ok(), "Should acquire lock when existing lock is corrupted");
+        assert!(
+            guard.is_ok(),
+            "Should acquire lock when existing lock is corrupted"
+        );
 
         // Verify the new lock has valid metadata with our PID
         let content = fs::read_to_string(&lock_path).unwrap();
@@ -441,11 +452,17 @@ mod tests {
 
         // Write an empty lock file
         fs::write(&lock_path, "").unwrap();
-        assert!(lock_path.exists(), "Empty lock file should exist before test");
+        assert!(
+            lock_path.exists(),
+            "Empty lock file should exist before test"
+        );
 
         // Should succeed because empty lock is treated as corrupted/stale
         let guard = service.acquire_lock(&settings_path);
-        assert!(guard.is_ok(), "Should acquire lock when existing lock is empty");
+        assert!(
+            guard.is_ok(),
+            "Should acquire lock when existing lock is empty"
+        );
 
         // Verify the new lock has valid metadata
         let content = fs::read_to_string(&lock_path).unwrap();

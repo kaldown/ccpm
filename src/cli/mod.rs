@@ -103,7 +103,12 @@ pub fn run_command(cmd: Commands) -> Result<()> {
     }
 }
 
-fn list_plugins(scope_filter: ScopeFilter, only_enabled: bool, only_disabled: bool, debug: bool) -> Result<()> {
+fn list_plugins(
+    scope_filter: ScopeFilter,
+    only_enabled: bool,
+    only_disabled: bool,
+    debug: bool,
+) -> Result<()> {
     let discovery = PluginDiscovery::new()?;
     let plugins = discovery.discover_all()?;
 
