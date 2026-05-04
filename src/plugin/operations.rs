@@ -79,6 +79,24 @@ impl PluginService {
         Ok(new_state)
     }
 
+    /// Toggle a plugin's enabled state in a specific scope.
+    ///
+    /// If that scope has no setting yet, first press flips the effective state
+    /// (so the user immediately sees a change). If a setting exists, flips it.
+    pub fn toggle_at_scope(&self, plugin: &Plugin, scope: Scope) -> Result<bool> {
+        let current_setting = match scope {
+            Scope::User => plugin.enabled_user,
+            Scope::Project => plugin.enabled_project,
+            Scope::Local => plugin.enabled_local,
+        };
+        let new_state = match current_setting {
+            Some(b) => !b,
+            None => !plugin.is_enabled(),
+        };
+        self.set_plugin_enabled(&plugin.id, scope, new_state)?;
+        Ok(new_state)
+    }
+
     /// Toggle auto-update for a marketplace
     pub fn toggle_auto_update(&self, marketplace: &str) -> Result<bool> {
         let path = self.paths.known_marketplaces();
@@ -470,5 +488,77 @@ mod tests {
         assert_eq!(metadata.pid, std::process::id());
 
         drop(guard);
+    }
+
+    fn make_plugin(id: &str, install_scope: Scope) -> Plugin {
+        Plugin {
+            id: id.to_string(),
+            name: id.split('@').next().unwrap().to_string(),
+            marketplace: id.split('@').nth(1).unwrap_or("unknown").to_string(),
+            description: None,
+            version: None,
+            author: None,
+            install_scope,
+            install_path: None,
+            project_path: None,
+            is_current_project: true,
+            enabled_user: None,
+            enabled_project: None,
+            enabled_local: None,
+            installed_at: None,
+            last_updated: None,
+        }
+    }
+
+    #[test]
+    fn test_toggle_at_scope_none_branch_flips_effective_state() {
+        let (_temp, service) = setup_test_env();
+        let mut plugin = make_plugin("p@m", Scope::User);
+        plugin.enabled_user = Some(true); // effective: enabled
+
+        // Local is None; first press should write Local=false (flips effective state)
+        let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
+        assert_eq!(new_state, false);
+
+        let written = serde_json::from_str::<Settings>(
+            &fs::read_to_string(service.paths.local_settings()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(written.enabled_plugins.get("p@m"), Some(&false));
+    }
+
+    #[test]
+    fn test_toggle_at_scope_none_branch_with_no_user_setting() {
+        let (_temp, service) = setup_test_env();
+        let plugin = make_plugin("p@m", Scope::User); // no settings anywhere
+
+        // is_enabled() == false; first press should write Local=true
+        let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
+        assert_eq!(new_state, true);
+    }
+
+    #[test]
+    fn test_toggle_at_scope_some_branch_flips_boolean() {
+        let (_temp, service) = setup_test_env();
+        let mut plugin = make_plugin("p@m", Scope::User);
+        plugin.enabled_local = Some(true);
+
+        let new_state = service.toggle_at_scope(&plugin, Scope::Local).unwrap();
+        assert_eq!(new_state, false);
+    }
+
+    #[test]
+    fn test_toggle_at_scope_writes_to_correct_file_per_scope() {
+        let (_temp, service) = setup_test_env();
+        let plugin = make_plugin("p@m", Scope::User);
+
+        service.toggle_at_scope(&plugin, Scope::User).unwrap();
+        assert!(service.paths.user_settings().exists());
+
+        service.toggle_at_scope(&plugin, Scope::Project).unwrap();
+        assert!(service.paths.project_settings().exists());
+
+        service.toggle_at_scope(&plugin, Scope::Local).unwrap();
+        assert!(service.paths.local_settings().exists());
     }
 }
