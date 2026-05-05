@@ -356,9 +356,11 @@ mod tests {
         for window in positions.windows(2) {
             assert!(
                 window[0].1 < window[1].1,
-                "expected {} before {} in serialized JSON",
+                "expected {} before {} in serialized JSON, got positions {} and {}",
                 window[0].0,
                 window[1].0,
+                window[0].1,
+                window[1].1,
             );
         }
     }
