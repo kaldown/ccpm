@@ -21,24 +21,24 @@ pub fn render_help(frame: &mut Frame, area: Rect) {
                 ("k / ↑", "Move up"),
                 ("g", "Go to first"),
                 ("G", "Go to last"),
-                ("Enter", "View details"),
+                ("i", "View detail modal"),
             ],
         ),
         (
-            "Plugin Actions",
+            "Plugin Actions (default = Local scope of CWD)",
             vec![
-                ("e", "Enable plugin"),
-                ("d", "Disable plugin"),
-                ("Space", "Toggle enable/disable"),
-                ("u", "Toggle auto-update"),
-                ("x", "Remove plugin"),
-                ("U", "Update plugin"),
+                ("Enter / l / Space", "Toggle in Local scope"),
+                ("e", "Enable in Local scope"),
+                ("d", "Disable in Local scope"),
+                ("p", "Toggle in Project scope (committed)"),
+                ("u", "Toggle in User scope (global)"),
+                ("x", "Remove plugin (placeholder)"),
             ],
         ),
         (
             "Filtering",
             vec![
-                ("s", "Cycle scope filter (All/User/Local)"),
+                ("s", "Cycle scope filter (All/User/Project/Local)"),
                 ("/", "Start search"),
                 ("Esc", "Clear search / Exit mode"),
             ],
@@ -82,6 +82,11 @@ pub fn render_help(frame: &mut Frame, area: Rect) {
         lines.push(Line::from(""));
     }
 
+    lines.push(Line::from(Span::styled(
+        "Tip: run from a project root (where .claude/ lives), not $HOME.",
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "Press ? or Esc to close",
         Style::default().fg(Color::DarkGray),
