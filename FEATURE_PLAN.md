@@ -251,6 +251,17 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ## Completed Features
 
+### Stable JSON Output (2026-05-05)
+
+CCPM-authored settings files now serialize with a deterministic alphabetical key order at every level, plus a trailing newline. Plugin toggles produce minimal diffs; files look identical across projects. `enabledPlugins` lands first (named struct field), then everything else alphabetical, with arrays preserving meaningful order.
+
+Files modified: `src/plugin/config.rs`, `src/plugin/operations.rs`.
+
+Spec: `docs/superpowers/specs/2026-05-05-stable-json-output-design.md`
+Plan: `docs/superpowers/plans/2026-05-05-stable-json-output.md`
+
+---
+
 ### B. Per-Project Plugin Scoping (2026-05-04)
 
 Implements Approach 1 keybindings: `Enter` / `l` / `Space` toggle the Local scope of the current working directory; `p` toggles Project; `u` toggles User; `e` / `d` enable/disable in Local. Detail modal moved from `Enter` to `i`. Combined with the discovery fix that lets user-scope plugins respect CWD overrides (formerly item #6).

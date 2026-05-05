@@ -75,6 +75,23 @@ This project maintains structured documentation. **Read the appropriate files ba
 - `README.md` - User documentation
 - Source code and tests
 
+## Git Safety (binding for Claude and all subagents)
+
+Destructive git operations have caused real incidents in this project. The rule:
+
+**Never run `git stash`, `git checkout <ref> -- <file>`, `git checkout -- <file>`, `git restore`, `git reset`, `git clean`, `git rebase`, `git revert`, `git push --force`, `git branch -D`, or `git worktree remove` without first asking the user.**
+
+If a task appears to require any of these, stop and ask — describe what command you'd run, why, and what files it would affect. Wait for explicit approval. This applies to every subagent dispatched for this project too; plans that delegate work MUST cite this rule in the dispatch prompt.
+
+**Allowed without asking:**
+- Read-only git: `git status`, `git log`, `git diff`, `git show`, `git rev-parse`, `git ls-files`, `git blame`, `git branch --show-current`.
+- `git add <specific paths>` and `git commit` for paths the user (or an approved plan) explicitly named. Never `git add -A` or `git add .`.
+- Creating branches (`git checkout -b <name>`) on a clean working tree.
+
+**Never silence errors** with `2>/dev/null`, `|| true`, or similar — if a command might fail, the failure must be visible.
+
+This rule exists because subagents have proposed sequences like `git stash; git checkout <old-sha> -- tests/integration.rs; git stash pop 2>/dev/null` while reviewing changes unrelated to that file. The user caught it; they will not always catch it.
+
 ## Build & Development Commands
 
 ```bash
@@ -212,6 +229,17 @@ Settings precedence: Local > Project > User
 | `~/.claude/plugins/installed_plugins.json` | Installation metadata (includes `projectPath`) |
 | `~/.claude/plugins/known_marketplaces.json` | Marketplace sources |
 | `<install_path>/.claude-plugin/plugin.json` | Plugin manifest |
+
+### On-Disk JSON Format
+
+CCPM-authored settings files use a deterministic alphabetical key order so a plugin toggle produces a minimal diff and files look identical across projects:
+- `enabledPlugins` is the first top-level key (named struct field).
+- All other top-level keys (flattened from `Settings.other`) follow in alphabetical order.
+- Nested object keys are alphabetical at every level.
+- Arrays (e.g. `permissions.allow`, `permissions.deny`, `permissions.ask`, hook arrays) preserve their existing order.
+- Files end with a trailing newline.
+
+Enforced at the type level via `BTreeMap` in `src/plugin/config.rs` (and `serde_json::Value::Object`'s default `BTreeMap` backing handles nested objects). CCPM does not modify `installed_plugins.json`, so its layout is untouched.
 
 ### Testing
 

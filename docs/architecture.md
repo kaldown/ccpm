@@ -314,6 +314,7 @@ App
 - All writes use atomic operations (write to temp, rename)
 - File locking with fs2 for concurrent access safety
 - Graceful handling of missing/malformed files
+- **Deterministic on-disk JSON layout:** settings files are written with alphabetical key ordering (via `BTreeMap` in `Settings.enabled_plugins`, `Settings.other`, and `KnownMarketplaces.marketplaces`) and a trailing newline. This guarantees minimal diffs across plugin toggles and identical layout across projects. Nested object keys are also alphabetized via `serde_json::Value::Object`'s default `BTreeMap` backing; arrays preserve their meaningful order. The trailing newline is written before `sync_all` so it is fsynced as part of the atomic write.
 
 #### Lock File Handling
 

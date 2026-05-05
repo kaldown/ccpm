@@ -17,6 +17,18 @@
 
 **Commit style:** Free-form descriptive messages, no Conventional Commits prefixes.
 
+## Subagent guardrails (binding for every task)
+
+Any subagent — implementer, reviewer, or otherwise — dispatched for this plan MUST obey these rules. They override anything else in this plan or your usual habits:
+
+1. **Never run destructive git commands without first asking the user.** This includes (non-exhaustive): `git stash`, `git checkout <ref> -- <file>`, `git checkout -- <file>`, `git restore`, `git reset`, `git clean`, `git rebase`, `git revert`, `git push --force`, `git branch -D`, `git worktree remove`. If a task seems to require any of these, STOP and report back as `BLOCKED` with the exact command and the reason you think it's needed. The user reviews and either authorizes or supplies an alternative.
+2. **Read-only git is fine** — `git status`, `git log`, `git diff`, `git show`, `git rev-parse`, `git ls-files`, `git blame`, `git branch --show-current`. These never alter project state.
+3. **`git add` and `git commit` are allowed** because the plan asks for them, but only with the file paths the task explicitly enumerates. Do not `git add -A` or `git add .`.
+4. **Never silence errors with `2>/dev/null`.** If a command might fail, you need to see the failure, not hide it.
+5. **Stay in scope.** A task names exact files. Do not modify or even read-via-checkout any file outside that list. If a verification step makes you think you need a file outside scope, that's a signal to stop and report it — not to widen the change.
+
+These rules exist because of a real failure: a reviewer subagent on a previous task proposed `git stash; git checkout <old-sha> -- tests/integration.rs; git checkout <branch> -- tests/integration.rs; git stash pop 2>/dev/null` while reviewing a change that did not touch `tests/integration.rs` at all. The user caught it. They will not always catch it. Therefore: ask first.
+
 ---
 
 ## File Structure
@@ -513,8 +525,10 @@ Expected: every test passes.
 
 - [ ] **Step 3: Run clippy with zero-warning enforcement**
 
-Run: `cargo clippy --all-targets -- -D warnings`
+Run: `cargo clippy -- -D warnings`
 Expected: clean exit, no warnings.
+
+(Note: `cargo clippy --all-targets -- -D warnings` would surface 10 pre-existing deprecation errors in `tests/integration.rs` — `assert_cmd::Command::cargo_bin` is deprecated in favor of `cargo::cargo_bin_cmd!`. This is unrelated to stable-JSON-output and is out of scope for this plan. The CCPM project's documented quality gate in `CLAUDE.md` is `cargo clippy -- -D warnings` without `--all-targets`, which is what this step enforces.)
 
 - [ ] **Step 4: Verify formatting**
 
