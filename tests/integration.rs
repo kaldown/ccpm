@@ -1,5 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::fs;
+use tempfile::TempDir;
 
 #[test]
 fn test_cli_help() {
@@ -65,4 +67,113 @@ fn test_cli_disable_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Disable a plugin"));
+}
+
+#[test]
+fn test_user_scope_plugin_with_local_override_is_disabled_in_cwd() {
+    let home = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+
+    // Set up the fake user home: install + enable gitlab globally
+    let claude_dir = home.path().join(".claude");
+    let plugins_dir = claude_dir.join("plugins");
+    fs::create_dir_all(&plugins_dir).unwrap();
+
+    fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"enabledPlugins":{"gitlab@market":true}}"#,
+    )
+    .unwrap();
+
+    fs::write(
+        plugins_dir.join("installed_plugins.json"),
+        r#"{
+            "version": 2,
+            "plugins": {
+                "gitlab@market": [{
+                    "scope": "user",
+                    "installPath": "/fake/path",
+                    "version": "1.0.0",
+                    "installedAt": "2026-01-01T00:00:00Z",
+                    "lastUpdated": "2026-01-01T00:00:00Z"
+                }]
+            }
+        }"#,
+    )
+    .unwrap();
+
+    // Project local override: disabled
+    let project_claude = project.path().join(".claude");
+    fs::create_dir_all(&project_claude).unwrap();
+    fs::write(
+        project_claude.join("settings.local.json"),
+        r#"{"enabledPlugins":{"gitlab@market":false}}"#,
+    )
+    .unwrap();
+
+    // Run `ccpm list --debug` in project; assert effective state
+    let output = Command::cargo_bin("ccpm")
+        .unwrap()
+        .args(["list", "--debug"])
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "ccpm list failed: {}", stderr);
+    assert!(
+        stderr.contains("enabled_local=Some(false)") || stderr.contains("local=Some(false)"),
+        "debug output should show local override; got:\n{}",
+        stderr
+    );
+    assert!(
+        stdout.contains("disabled"),
+        "gitlab should appear disabled in list output; got:\n{}",
+        stdout
+    );
+}
+
+#[test]
+fn test_cli_disable_with_scope_local_writes_local_settings() {
+    let home = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+
+    // Minimal fake user home so ccpm can run
+    fs::create_dir_all(home.path().join(".claude/plugins")).unwrap();
+    fs::write(
+        home.path().join(".claude/plugins/installed_plugins.json"),
+        r#"{"version":2,"plugins":{}}"#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("ccpm")
+        .unwrap()
+        .args(["disable", "demo@market", "--scope", "local"])
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "disable command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let local_settings = project.path().join(".claude/settings.local.json");
+    assert!(local_settings.exists(), "settings.local.json not created");
+
+    let content = fs::read_to_string(&local_settings).unwrap();
+    assert!(
+        content.contains("\"demo@market\""),
+        "settings.local.json missing entry: {}",
+        content
+    );
+    assert!(
+        content.contains("false"),
+        "settings.local.json should set demo@market to false: {}",
+        content
+    );
 }
