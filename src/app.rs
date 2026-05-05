@@ -284,4 +284,13 @@ impl App {
         let enabled = self.plugins.iter().filter(|p| p.is_enabled()).count();
         (enabled, self.plugins.len())
     }
+
+    /// Count of plugins in the current filtered view that have a non-install-scope override.
+    pub fn override_count(&self) -> usize {
+        self.filtered_plugins
+            .iter()
+            .filter_map(|&i| self.plugins.get(i))
+            .filter(|p| p.has_override())
+            .count()
+    }
 }

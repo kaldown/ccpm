@@ -96,6 +96,11 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
             format!("{}/{} enabled ", enabled, total),
             Style::default().fg(Color::Green),
         ),
+        Span::raw("│ "),
+        Span::styled(
+            format!("[overrides: {}] ", app.override_count()),
+            Style::default().fg(Color::Yellow),
+        ),
     ];
 
     // Add search indicator if in search mode
