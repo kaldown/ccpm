@@ -7,6 +7,14 @@ use ratatui::{
     Frame,
 };
 
+fn format_setting(value: Option<bool>) -> Span<'static> {
+    match value {
+        Some(true) => Span::styled("enabled", Style::default().fg(Color::Green)),
+        Some(false) => Span::styled("disabled", Style::default().fg(Color::Red)),
+        None => Span::styled("(no setting)", Style::default().fg(Color::DarkGray)),
+    }
+}
+
 pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
     let content = if let Some(plugin) = app.selected_plugin() {
         let mut lines = vec![
@@ -52,6 +60,47 @@ pub fn render_details(frame: &mut Frame, app: &App, area: Rect) {
             ),
             Span::raw(plugin.enabled_context()),
         ]));
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Settings:",
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(vec![
+            Span::raw("  User:    "),
+            format_setting(plugin.enabled_user),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Project: "),
+            format_setting(plugin.enabled_project),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Local:   "),
+            format_setting(plugin.enabled_local),
+        ]));
+
+        let effective_label = match plugin.effective_scope() {
+            Some(scope) => format!(
+                "Effective: {} ({})",
+                if plugin.is_enabled() {
+                    "ENABLED"
+                } else {
+                    "DISABLED"
+                },
+                scope
+            ),
+            None => "Effective: DISABLED (no settings)".to_string(),
+        };
+        lines.push(Line::from(Span::styled(
+            effective_label,
+            Style::default()
+                .fg(if plugin.is_enabled() {
+                    Color::Green
+                } else {
+                    Color::Red
+                })
+                .add_modifier(Modifier::BOLD),
+        )));
 
         // Always show project path for project/local scopes (using relative-to-home format)
         if plugin.install_scope != crate::plugin::Scope::User {
