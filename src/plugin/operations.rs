@@ -258,6 +258,12 @@ impl PluginService {
                 source,
             })?;
 
+        file.write_all(b"\n")
+            .map_err(|source| PluginError::ConfigWriteError {
+                path: temp_path.clone(),
+                source,
+            })?;
+
         file.sync_all()
             .map_err(|source| PluginError::ConfigWriteError {
                 path: temp_path.clone(),
@@ -551,5 +557,21 @@ mod tests {
 
         service.toggle_at_scope(&plugin, Scope::Local).unwrap();
         assert!(service.paths.local_settings().exists());
+    }
+
+    #[test]
+    fn test_write_appends_trailing_newline() {
+        let (_temp, service) = setup_test_env();
+
+        service
+            .enable_plugin("trailing-newline@market", Scope::User)
+            .unwrap();
+
+        let bytes = fs::read(service.paths.user_settings()).unwrap();
+        assert!(
+            bytes.ends_with(b"\n"),
+            "settings file should end with a newline; last 4 bytes were {:?}",
+            &bytes[bytes.len().saturating_sub(4)..],
+        );
     }
 }
