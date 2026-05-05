@@ -574,4 +574,47 @@ mod tests {
             &bytes[bytes.len().saturating_sub(4)..],
         );
     }
+
+    #[test]
+    fn test_toggle_preserves_canonical_order() {
+        let (_temp, service) = setup_test_env();
+
+        // Pre-populate with several plugins and several "other" fields,
+        // inserted in non-alphabetical order.
+        let mut settings = Settings::default();
+        for id in &["zebra@m", "alpha@m", "mango@m"] {
+            settings.enabled_plugins.insert((*id).to_string(), true);
+        }
+        settings.other.insert(
+            "model".to_string(),
+            serde_json::Value::String("claude-sonnet-4-6".into()),
+        );
+        settings
+            .other
+            .insert("env".to_string(), serde_json::json!({ "FOO": "bar" }));
+
+        let path = service.paths.user_settings();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+
+        // Toggle one of the plugins.
+        service.disable_plugin("alpha@m", Scope::User).unwrap();
+
+        // Build the expected canonical layout: same fields, alpha@m disabled.
+        let mut expected = settings.clone();
+        expected
+            .enabled_plugins
+            .insert("alpha@m".to_string(), false);
+        let mut expected_bytes = serde_json::to_string_pretty(&expected)
+            .unwrap()
+            .into_bytes();
+        expected_bytes.push(b'\n');
+
+        let actual_bytes = fs::read(&path).unwrap();
+
+        assert_eq!(
+            actual_bytes, expected_bytes,
+            "toggle produced a non-canonical byte layout — ordering or formatting drifted"
+        );
+    }
 }
