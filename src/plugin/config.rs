@@ -287,19 +287,13 @@ mod tests {
         // certainly NOT produce alphabetical output by accident.
         let mut settings = Settings::default();
         for id in &[
-            "zebra@m",
-            "alpha@m",
-            "mango@m",
-            "kiwi@m",
-            "papaya@m",
-            "banana@m",
+            "zebra@m", "alpha@m", "mango@m", "kiwi@m", "papaya@m", "banana@m",
         ] {
             settings.enabled_plugins.insert((*id).to_string(), true);
         }
 
         let json = serde_json::to_string_pretty(&settings).unwrap();
 
-        // Find the line indices of each plugin id in the serialized output.
         let positions: Vec<(&str, usize)> = [
             "alpha@m", "banana@m", "kiwi@m", "mango@m", "papaya@m", "zebra@m",
         ]
@@ -307,7 +301,6 @@ mod tests {
         .map(|id| (*id, json.find(id).unwrap_or_else(|| panic!("missing {id}"))))
         .collect();
 
-        // Each id must appear at a strictly increasing byte offset, i.e. alphabetical order.
         for window in positions.windows(2) {
             assert!(
                 window[0].1 < window[1].1,
