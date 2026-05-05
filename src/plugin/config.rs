@@ -364,4 +364,35 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_settings_roundtrip_idempotent() {
+        let original_json = r#"{
+  "enabledPlugins": {
+    "zebra@m": true,
+    "alpha@m": false,
+    "mango@m": true
+  },
+  "model": "claude-sonnet-4-6",
+  "env": {
+    "FOO": "bar",
+    "ALPHA": "1"
+  },
+  "permissions": {
+    "allow": ["one", "two"],
+    "deny": ["three"]
+  }
+}"#;
+
+        let parsed: Settings = serde_json::from_str(original_json).unwrap();
+        let first = serde_json::to_string_pretty(&parsed).unwrap();
+
+        let reparsed: Settings = serde_json::from_str(&first).unwrap();
+        let second = serde_json::to_string_pretty(&reparsed).unwrap();
+
+        assert_eq!(
+            first, second,
+            "second serialization differed from first — non-deterministic ordering somewhere"
+        );
+    }
 }
