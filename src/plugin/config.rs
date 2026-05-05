@@ -49,7 +49,7 @@ pub struct InstalledPluginEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KnownMarketplaces {
     #[serde(flatten)]
-    pub marketplaces: HashMap<String, MarketplaceEntry>,
+    pub marketplaces: BTreeMap<String, MarketplaceEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -309,6 +309,56 @@ mod tests {
                 window[1].0,
                 window[0].1,
                 window[1].1,
+            );
+        }
+    }
+
+    #[test]
+    fn test_known_marketplaces_serialize_keys_sorted() {
+        let mut marketplaces = KnownMarketplaces::default();
+        let entries = [
+            "zebra-mp",
+            "alpha-mp",
+            "mango-mp",
+            "kiwi-mp",
+            "papaya-mp",
+            "banana-mp",
+        ];
+        for name in &entries {
+            marketplaces.marketplaces.insert(
+                (*name).to_string(),
+                MarketplaceEntry {
+                    source: MarketplaceSource {
+                        source: "github".into(),
+                        repo: "owner/repo".into(),
+                    },
+                    install_location: PathBuf::from("/tmp"),
+                    last_updated: "2026-05-05T00:00:00Z".into(),
+                    auto_update: false,
+                },
+            );
+        }
+
+        let json = serde_json::to_string_pretty(&marketplaces).unwrap();
+
+        let positions: Vec<(&str, usize)> = [
+            "alpha-mp",
+            "banana-mp",
+            "kiwi-mp",
+            "mango-mp",
+            "papaya-mp",
+            "zebra-mp",
+        ]
+        .iter()
+        .map(|n| (*n, json.find(n).unwrap_or_else(|| panic!("missing {n}"))))
+        .collect();
+
+        for window in positions.windows(2) {
+            assert!(
+                window[0].1 < window[1].1,
+                "expected {} before {} in serialized JSON",
+                window[0].0,
+                window[1].0,
             );
         }
     }
