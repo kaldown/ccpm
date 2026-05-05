@@ -58,16 +58,20 @@ ccpm
 | `k` / `↑` | Move up |
 | `g` | Go to first |
 | `G` | Go to last |
-| `Enter` | View plugin details (modal) |
-| `Space` | Toggle enable/disable |
-| `e` | Enable plugin |
-| `d` | Disable plugin |
+| `Enter` / `l` / `Space` | Toggle plugin in **Local** scope (`./.claude/settings.local.json`) |
+| `e` | Enable plugin in Local scope |
+| `d` | Disable plugin in Local scope |
+| `p` | Toggle plugin in **Project** scope (`./.claude/settings.json`, committed) |
+| `u` | Toggle plugin in **User** scope (`~/.claude/settings.json`, global) |
+| `i` | View plugin details (modal) |
 | `s` | Cycle scope filter (All/User/Project/Local) |
 | `/` | Start search |
 | `Esc` | Clear search / Exit mode |
 | `?` | Toggle help |
 | `r` | Reload plugins |
 | `q` | Quit |
+
+The default toggle keys (`Enter` / `l` / `Space`) always write to the **Local** scope of the current working directory — perfect for per-project overrides without touching team-shared or global settings. Run CCPM from the project root where `.claude/` lives.
 
 ### Scope Indicators
 

@@ -116,6 +116,28 @@ The `--debug` flag is useful for diagnosing settings-related issues. It outputs 
 DEBUG: plugin-id -> user=Some(true) project=None local=Some(false) -> is_enabled=false project_path=Some("/path/to/project")
 ```
 
+## TUI Keybindings
+
+In Normal mode (the default):
+
+| Key | Action |
+|-----|--------|
+| `Enter` / `l` / `Space` | Toggle plugin in **Local** scope (`./.claude/settings.local.json`) |
+| `e` | Enable plugin in Local scope |
+| `d` | Disable plugin in Local scope |
+| `p` | Toggle plugin in Project scope (`./.claude/settings.json`, committed) |
+| `u` | Toggle plugin in User scope (`~/.claude/settings.json`, global) |
+| `i` | Show detail modal |
+| `s` | Cycle scope filter |
+| `/` | Search |
+| `?` | Help |
+| `r` | Reload plugins |
+| `q` | Quit |
+
+The default actions (`Enter` / `l` / `Space` / `e` / `d`) write to **Local** scope of the current working directory, matching the per-project workflow. Use `u` and `p` for explicit User or Project writes.
+
+**Tip:** run CCPM from a project root (where `.claude/` lives) — running from a subdirectory will create `.claude/` at the wrong level.
+
 ## Architecture
 
 CCPM is a TUI application for managing Claude Code plugins. It reads/writes Claude Code's configuration files to enable/disable plugins.
@@ -156,8 +178,8 @@ Settings precedence: Local > Project > User
 
 **Plugin Discovery** (`plugin/discovery.rs`):
 - Reads `~/.claude/plugins/installed_plugins.json` for installation data
-- For project/local scope plugins: reads settings from the PLUGIN's `projectPath` directory (not CWD)
-- For user scope plugins: only uses user settings (no project/local settings)
+- For **all** plugins (including user-scope), `enabled_project` and `enabled_local` are populated from the CWD's `.claude/settings.json` and `.claude/settings.local.json` — so a CWD override on a globally-installed plugin is always respected
+- For project/local scope plugins that have a `projectPath`: reads settings from the PLUGIN's `projectPath` directory to preserve cross-project isolation (a plugin installed in Project A won't show Project B's settings)
 - Uses `projectPath` field to determine `is_current_project` for project/local scopes
 - Caches settings per-project to avoid redundant file reads
 - Merges into `Plugin` structs with `enabled_user`, `enabled_project`, and `enabled_local` fields
@@ -175,7 +197,10 @@ Settings precedence: Local > Project > User
 **UI Features**:
 - CWD displayed in header (format: `~/relative/path`)
 - Scope indicators: `[U]`, `[P]`, `[P*]`, `[L]`, `[L*]`
+- Override marker `↓` (yellow) next to scope indicator when a non-install-scope setting is active
+- `[overrides: N]` count in header when overrides exist in the current view
 - Project path shown for all project/local scope plugins
+- Details pane shows per-scope Settings block (User/Project/Local breakdown + Effective line)
 
 ### Config Files Read
 
@@ -194,23 +219,7 @@ Unit tests are co-located in each module. Integration tests in `tests/integratio
 
 MSRV is Rust 1.70.
 
-## In-Progress Features
-
-See `FEATURE_PLAN.md` for full details. Context files in `.claude/` directory.
-
-### Scope Selection (Feature B)
-
-**Problem**: Toggle uses `install_scope`, may create unwanted `settings.json`.
-
-**Solution**:
-- `ScopeSelectionMode` enum: Modal, Inline, Keybinding (compile-time const)
-- Keybindings: `u`/`p`/`l` for direct scope enable
-- `AppMode::ScopeSelect` for dialog state
-- Enter triggers scope selection instead of direct toggle
-
-**Key files**: `src/app.rs`, `src/ui/dialogs.rs`, `src/main.rs`
-
-### Important Design Decision
+## Important Design Decision
 
 **Installation vs Enabling are separate concerns:**
 - `installed_plugins.json` tracks WHERE plugin files live (never modified on enable/disable)

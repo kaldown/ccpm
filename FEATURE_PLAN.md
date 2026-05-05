@@ -4,22 +4,6 @@ This document tracks planned features and ideas for future development.
 
 ## In Progress Features
 
-### B. Scope Selection on Enable/Disable
-
-**Status**: Planned (2026-01-02)
-**Priority**: High
-**Context File**: `.claude/ccpm-task-scope.md`
-
-Current problem: Toggle uses `install_scope` which may not match user preference. Creates `settings.json` even if user only uses `settings.local.json`.
-
-Implementation:
-- `ScopeSelectionMode` enum: Modal, Inline, Keybinding (compile-time const)
-- Keybindings: `u`/`p`/`l` for direct scope selection
-- Enter key triggers scope selection dialog
-- `AppMode::ScopeSelect` for dialog state
-
----
-
 ### C. Persist Default Scope Selection
 
 **Status**: FUTURE (do not implement yet)
@@ -265,36 +249,17 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ---
 
-### 6. Local enabledPlugins Override for User-Scope Plugins
+## Completed Features
 
-**Status**: Not implemented
-**Priority**: Medium
+### B. Per-Project Plugin Scoping (2026-05-04)
 
-**Problem**: User-scope plugins only read their enabled state from `~/.claude/settings.json`. Local `settings.local.json` overrides in a project directory are ignored for user-scope plugins.
+Implements Approach 1 keybindings: `Enter` / `l` / `Space` toggle the Local scope of the current working directory; `p` toggles Project; `u` toggles User; `e` / `d` enable/disable in Local. Detail modal moved from `Enter` to `i`. Combined with the discovery fix that lets user-scope plugins respect CWD overrides (formerly item #6).
 
-**Current behavior**:
-```
-# For a user-scope plugin like rust-analyzer-lsp:
-~/.claude/settings.json: enabledPlugins["rust-analyzer-lsp"] = false
-./.claude/settings.local.json: enabledPlugins["rust-analyzer-lsp"] = true
+Spec: `docs/superpowers/specs/2026-05-04-per-project-plugin-scoping-design.md`.
 
-# Result: rust-analyzer-lsp shows as DISABLED (user setting wins, local ignored)
-```
-
-**Expected behavior**: Local settings should override user settings regardless of where the plugin is installed.
-
-**Use case**: A Python developer wants Python plugins globally enabled but wants to disable them for a specific Rust project, using local settings overrides.
-
-**Implementation**:
-1. In `PluginDiscovery::discover_all()`, always load CWD's local/project settings
-2. For user-scope plugins, apply precedence: Local (CWD) > Project (CWD) > User
-3. Update debug output to show when local overrides are being applied
-
-**Note**: This differs from the current cross-project isolation fix. That fix ensures plugins installed in Project A read settings from Project A. This feature would allow the current project (CWD) to override settings for any plugin, regardless of install scope.
+Files modified: `src/plugin/discovery.rs`, `src/plugin/operations.rs`, `src/plugin/mod.rs`, `src/app.rs`, `src/main.rs`, `src/ui/plugin_list.rs`, `src/ui/details.rs`, `src/ui/help.rs`, `src/ui/mod.rs`, `tests/integration.rs`.
 
 ---
-
-## Completed Features
 
 ### Cross-Project Settings Isolation Fix (2026-01-02)
 
@@ -358,12 +323,13 @@ Files modified: `src/plugin/operations.rs`, `src/plugin/mod.rs`
 ---
 
 - [x] Basic TUI plugin list
-- [x] User/Local scope display (partial - needs Project scope)
+- [x] User/Project/Local scope display
 - [x] Enable/disable plugins
 - [x] Search/filter plugins
 - [x] Detail modal
 - [x] Vim-style lock file handling (Feature A)
 - [x] Settings precedence bug fix (Local > Project > User)
+- [x] Per-project plugin scoping with per-scope keybindings (Feature B + item #6)
 
 ---
 

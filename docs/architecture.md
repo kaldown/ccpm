@@ -11,9 +11,11 @@
   - `plugins/cache/` - Cached plugin files
   - `plugins/marketplaces/` - Marketplace repositories
 
+- **Project Scope**: `./.claude/`
+  - `settings.json` - Project-specific plugin settings (team-shared, committed to git)
+
 - **Local Scope**: `./.claude/`
-  - `settings.json` - Project-specific plugin settings
-  - `settings.local.json` - Local overrides (gitignored)
+  - `settings.local.json` - Personal per-project overrides (gitignored)
 
 ### Data Structures
 
@@ -32,13 +34,14 @@
   "version": 2,
   "plugins": {
     "plugin-name@marketplace": [{
-      "scope": "user",
+      "scope": "user",          // "user" | "project" | "local"
       "installPath": "/path/to/plugin",
       "version": "1.0.0",
       "installedAt": "ISO8601",
       "lastUpdated": "ISO8601",
       "gitCommitSha": "sha",
-      "isLocal": true
+      "isLocal": true,
+      "projectPath": "/path/to/project"  // present for project/local scope only
     }]
   }
 }
@@ -94,15 +97,15 @@ pub struct Plugin {
     // Installation information
     pub install_scope: Scope,    // Where installed (from installed_plugins.json)
     pub install_path: Option<PathBuf>,
-    pub project_path: Option<PathBuf>,  // For project/local: which project
-    pub is_current_project: bool, // For local: is it THIS project?
+    pub project_path: Option<PathBuf>,  // For project/local: which project owns this install
+    pub is_current_project: bool, // For project/local: is this the CWD project?
 
     // Enabled status (tracked separately for each scope)
     // Option semantics: None = no setting, Some(true) = enabled, Some(false) = disabled
     // Precedence: Local > Project > User (per Claude Code docs)
     pub enabled_user: Option<bool>,     // Setting in ~/.claude/settings.json
-    pub enabled_project: Option<bool>,  // Setting in ./.claude/settings.json
-    pub enabled_local: Option<bool>,    // Setting in ./.claude/settings.local.json
+    pub enabled_project: Option<bool>,  // Setting in ./.claude/settings.json (CWD)
+    pub enabled_local: Option<bool>,    // Setting in ./.claude/settings.local.json (CWD)
 
     pub installed_at: Option<String>,
     pub last_updated: Option<String>,
@@ -122,12 +125,18 @@ impl Plugin {
 
     /// "[U]" | "[P]" | "[P*]" | "[L]" | "[L*]"
     pub fn scope_indicator(&self) -> &'static str;
+
+    /// Sets the enabled_* field for a specific scope (None clears it)
+    pub fn set_enabled(&mut self, scope: Scope, value: Option<bool>);
+
+    /// True when any scope other than install_scope has a setting for this plugin
+    pub fn has_override(&self) -> bool;
 }
 
 pub enum Scope {
-    User,    // Installed in ~/.claude
-    Project, // Installed in project's .claude (shared)
-    Local,   // Installed in project's .claude (gitignored)
+    User,    // Installed in ~/.claude (global)
+    Project, // Installed in project's .claude (team-shared, committed)
+    Local,   // Installed in project's .claude (personal, gitignored)
 }
 
 pub struct Author {
@@ -142,13 +151,11 @@ The plugin scope is determined from `installed_plugins.json`, not from which `se
 
 1. **Installation scope** (`install_scope`): Read from `entry.scope` in `installed_plugins.json`
 2. **Current project detection** (`is_current_project`): For project/local installs, compare `entry.project_path` with current working directory
-3. **Enabled status**: Read from the PLUGIN's project directory, not CWD:
-   - User scope: Only `~/.claude/settings.json` applies
-   - Project/Local scope: Settings read from `{projectPath}/.claude/settings.json` and `{projectPath}/.claude/settings.local.json`
+3. **Enabled status** (`enabled_project`, `enabled_local`): **always populated from CWD** — so a CWD override always applies regardless of install scope
 
 ### Cross-Project Settings Isolation
 
-Plugins installed in different projects read their enabled state from THEIR project's settings:
+Project/local-scope plugins installed in other projects read their enabled state from their own project's settings, not CWD:
 
 ```
 Plugin: agent-orchestration@marketplace
@@ -156,41 +163,70 @@ Install scope: local
 Project path: ~/Projects/Ternv3
 
 When CCPM runs from ~/Projects/ccpm:
-  - CWD settings: ~/Projects/ccpm/.claude/settings*.json (IGNORED for this plugin)
-  - Plugin settings: ~/Projects/Ternv3/.claude/settings*.json (USED)
+  - enabled_user:    from ~/.claude/settings.json       (always)
+  - enabled_project: from ~/Projects/Ternv3/.claude/settings.json (plugin's own project)
+  - enabled_local:   from ~/Projects/Ternv3/.claude/settings.local.json (plugin's own project)
 ```
 
-This ensures that a plugin's enabled state is consistent regardless of which directory CCPM is run from.
+This ensures that a plugin installed in Project A shows the correct on/off state when CCPM is opened from Project B.
+
+User-scope plugins follow the CWD-only path (no `project_path` to look up):
+
+```
+Plugin: gitlab@claude-plugins-official
+Install scope: user
+
+When CCPM runs from ~/Projects/ccpm:
+  - enabled_user:    from ~/.claude/settings.json (global)
+  - enabled_project: from ~/Projects/ccpm/.claude/settings.json (CWD)
+  - enabled_local:   from ~/Projects/ccpm/.claude/settings.local.json (CWD)
+```
+
+Writing `Local = false` for a user-scope plugin from the right project directory is sufficient to disable it in that project only.
 
 ### Settings Loading Strategy
 
 ```rust
-// Cache to avoid re-reading project settings
+// Always load CWD project/local settings (used for user-scope plugins and fallback)
+let cwd_project_enabled = cwd_project_settings.map(|s| s.enabled_plugins).unwrap_or_default();
+let cwd_local_enabled   = cwd_local_settings.map(|s| s.enabled_plugins).unwrap_or_default();
+
+// Cache to avoid re-reading cross-project settings
 let mut project_settings_cache: HashMap<PathBuf, (Option<Settings>, Option<Settings>)>;
 
 // For each plugin:
-match plugin.install_scope {
+let (plugin_enabled_project, plugin_enabled_local) = match install_scope {
     Scope::User => {
-        // Only user settings apply
-        (None, None)
+        // User-scope: CWD settings are the override source
+        (
+            cwd_project_enabled.get(id).copied(),
+            cwd_local_enabled.get(id).copied(),
+        )
     }
     Scope::Project | Scope::Local => {
-        // Read from plugin's project_path
         if let Some(ref proj_path) = entry.project_path {
+            // Read from plugin's own project_path for cross-project isolation
             let (proj, local) = cache.entry(proj_path.clone())
                 .or_insert_with(|| ConfigPaths::load_settings_from_project(proj_path));
-            // Use these settings
+            (
+                proj.as_ref().and_then(|s| s.enabled_plugins.get(id).copied()),
+                local.as_ref().and_then(|s| s.enabled_plugins.get(id).copied()),
+            )
         } else {
-            // Fallback to CWD (legacy behavior)
+            // No project_path: fall back to CWD
+            (
+                cwd_project_enabled.get(id).copied(),
+                cwd_local_enabled.get(id).copied(),
+            )
         }
     }
-}
+};
 ```
 
 This allows accurate display of:
 - Where a plugin is physically installed
-- Whether a local plugin belongs to the current project or another project
-- Which settings files have the plugin enabled
+- Whether a project/local plugin belongs to the current project or another project
+- Which settings files have the plugin enabled, including CWD overrides on user-scope plugins
 
 ### State Management (Elm-like)
 
@@ -206,12 +242,27 @@ pub struct App {
     pub service: PluginService,
 }
 
+impl App {
+    /// Toggle plugin at an explicit scope (Local / Project / User).
+    /// None branch: first press flips the effective state.
+    pub fn toggle_selected_at_scope(&mut self, scope: Scope);
+
+    /// Enable plugin at an explicit scope.
+    pub fn enable_selected_at_scope(&mut self, scope: Scope);
+
+    /// Disable plugin at an explicit scope.
+    pub fn disable_selected_at_scope(&mut self, scope: Scope);
+
+    /// Count of plugins in the current filtered view that have any override.
+    pub fn override_count(&self) -> usize;
+}
+
 pub enum AppMode {
     Normal,      // Default navigation mode
     Search,      // Search input active
     Help,        // Help overlay visible
     Confirm(ConfirmAction),  // Confirmation dialog
-    DetailModal, // Full-screen plugin details
+    DetailModal, // Full-screen plugin details (i key)
 }
 
 pub enum ConfirmAction {
@@ -226,6 +277,8 @@ pub trait PluginService {
     fn discover_plugins(&self) -> Result<Vec<Plugin>>;
     fn enable_plugin(&mut self, id: &str, scope: Scope) -> Result<()>;
     fn disable_plugin(&mut self, id: &str, scope: Scope) -> Result<()>;
+    /// Toggle at an explicit scope; first press flips effective state when no setting exists.
+    fn toggle_at_scope(&self, plugin: &Plugin, scope: Scope) -> Result<bool>;
     fn toggle_auto_update(&mut self, marketplace: &str) -> Result<()>;
     fn add_plugin(&mut self, source: &str, scope: Scope) -> Result<Plugin>;
     fn remove_plugin(&mut self, id: &str) -> Result<()>;
@@ -238,21 +291,22 @@ pub trait PluginService {
 ```
 App
 ├── Header (status bar)
-│   └── Scope filter, enabled count, search query
+│   └── CWD, scope filter, enabled count, [overrides: N], search query
 ├── MainLayout (horizontal split 50/50)
 │   ├── PluginList (left panel)
-│   │   └── List items with [U]/[L]/[L*] scope + [+]/[-] status indicators
+│   │   └── List items with [U]/[P]/[P*]/[L]/[L*] scope + ↓ override marker + [+]/[-] status
 │   └── DetailsPanel (right panel)
 │       ├── Plugin info (name, marketplace, status)
 │       ├── Installed location & enabled context
+│       ├── Settings block: per-scope breakdown (User/Project/Local) + Effective line
 │       ├── Version, author, path
 │       └── Description
 ├── CommandBar (bottom)
-│   └── Mode-specific keybinding hints + status messages
+│   └── Mode-specific keybinding hints (Enter/l/p/u/e/d/i/…) + status messages
 └── Overlays (modal dialogs)
-    ├── HelpOverlay (? key)
+    ├── HelpOverlay (? key) — includes per-scope keybinding table
     ├── ConfirmDialog (x key for remove)
-    └── DetailModal (Enter key - expanded plugin info)
+    └── DetailModal (i key - expanded plugin info)
 ```
 
 ### File Operations
