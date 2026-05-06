@@ -121,15 +121,22 @@ ccpm info plugin-name@marketplace
 
 Example output:
 ```
-Name:        context7
+Name:        gitlab
 Marketplace: claude-plugins-official
-ID:          context7@claude-plugins-official
-Status:      enabled
+ID:          gitlab@claude-plugins-official
+Status:      disabled
 Installed:   User (~/.claude)
-Enabled in:  User only
+Enabled in:  User
+Settings:
+  User:    enabled
+  Project: (no setting)
+  Local:   disabled  · ~/Projects/myapp/.claude/settings.local.json
+Effective:   DISABLED (Local)
 Version:     1.0.0
-Path:        /Users/you/.claude/plugins/marketplaces/claude-plugins-official/context7
+Path:        /Users/you/.claude/plugins/cache/claude-plugins-official/gitlab/1.0.0
 ```
+
+The `Settings:` block shows the per-scope flags, and the `· <path>` suffix on Project/Local rows tells you which file contains each override — handy when a plugin's effective state surprises you because another project's local settings are pinning it.
 
 ## Configuration
 
