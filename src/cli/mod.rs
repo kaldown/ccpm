@@ -209,12 +209,13 @@ fn format_setting_text(value: Option<bool>) -> &'static str {
 
 fn format_settings_row(label: &str, value: Option<bool>, source: Option<String>) -> String {
     let value_text = format_setting_text(value);
-    // Pad "Project" / "Local" to a constant column so the value text aligns.
-    // Longest label is "Project" (7), so pad to 7 then a colon and 1 space.
-    let label_padded = format!("{:<7}", label);
+    // Pad label-with-colon to width 9 so the value column aligns across
+    // User (5 chars) / Project (8 chars) / Local (6 chars) rows.
+    let label_with_colon = format!("{}:", label);
+    let padded = format!("{:<9}", label_with_colon);
     match source {
-        Some(s) => format!("  {}: {}  · {}", label_padded, value_text, s),
-        None => format!("  {}: {}", label_padded, value_text),
+        Some(s) => format!("  {}{}  · {}", padded, value_text, s),
+        None => format!("  {}{}", padded, value_text),
     }
 }
 

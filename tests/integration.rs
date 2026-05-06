@@ -233,9 +233,8 @@ fn test_cli_info_shows_override_source_path() {
     assert!(output.status.success(), "ccpm info failed: {stderr}");
 
     // Settings block must include a Local row showing the disabled value
-    // Label is padded to 7 chars, so "Local" (5) becomes "Local  :" in output
     assert!(
-        stdout.contains("Local") && stdout.contains("disabled"),
+        stdout.contains("Local:") && stdout.contains("disabled"),
         "info should show 'Local: disabled' row; got:\n{stdout}"
     );
     // The Local row should be annotated with the source file path
