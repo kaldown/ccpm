@@ -177,3 +177,70 @@ fn test_cli_disable_with_scope_local_writes_local_settings() {
         content
     );
 }
+
+#[test]
+fn test_cli_info_shows_override_source_path() {
+    let home = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+
+    // Fake user home: gitlab installed user-scope, enabled globally
+    let claude_dir = home.path().join(".claude");
+    let plugins_dir = claude_dir.join("plugins");
+    fs::create_dir_all(&plugins_dir).unwrap();
+
+    fs::write(
+        claude_dir.join("settings.json"),
+        r#"{"enabledPlugins":{"gitlab@market":true}}"#,
+    )
+    .unwrap();
+
+    fs::write(
+        plugins_dir.join("installed_plugins.json"),
+        r#"{
+            "version": 2,
+            "plugins": {
+                "gitlab@market": [{
+                    "scope": "user",
+                    "installPath": "/fake/path",
+                    "version": "1.0.0",
+                    "installedAt": "2026-01-01T00:00:00Z",
+                    "lastUpdated": "2026-01-01T00:00:00Z"
+                }]
+            }
+        }"#,
+    )
+    .unwrap();
+
+    // Project local override: disabled
+    let project_claude = project.path().join(".claude");
+    fs::create_dir_all(&project_claude).unwrap();
+    fs::write(
+        project_claude.join("settings.local.json"),
+        r#"{"enabledPlugins":{"gitlab@market":false}}"#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("ccpm")
+        .unwrap()
+        .args(["info", "gitlab@market"])
+        .env("HOME", home.path())
+        .current_dir(project.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "ccpm info failed: {stderr}");
+
+    // Settings block must include a Local row showing the disabled value
+    // Label is padded to 7 chars, so "Local" (5) becomes "Local  :" in output
+    assert!(
+        stdout.contains("Local") && stdout.contains("disabled"),
+        "info should show 'Local: disabled' row; got:\n{stdout}"
+    );
+    // The Local row should be annotated with the source file path
+    assert!(
+        stdout.contains(" · ") && stdout.contains("settings.local.json"),
+        "info should annotate Local row with ' · <path>/settings.local.json'; got:\n{stdout}"
+    );
+}

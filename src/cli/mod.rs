@@ -199,6 +199,25 @@ fn disable_plugin(plugin_id: &str, scope: Scope) -> Result<()> {
     Ok(())
 }
 
+fn format_setting_text(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "enabled",
+        Some(false) => "disabled",
+        None => "(no setting)",
+    }
+}
+
+fn format_settings_row(label: &str, value: Option<bool>, source: Option<String>) -> String {
+    let value_text = format_setting_text(value);
+    // Pad "Project" / "Local" to a constant column so the value text aligns.
+    // Longest label is "Project" (7), so pad to 7 then a colon and 1 space.
+    let label_padded = format!("{:<7}", label);
+    match source {
+        Some(s) => format!("  {}: {}  · {}", label_padded, value_text, s),
+        None => format!("  {}: {}", label_padded, value_text),
+    }
+}
+
 fn show_info(plugin_id: &str) -> Result<()> {
     let discovery = PluginDiscovery::new()?;
     let plugins = discovery.discover_all()?;
@@ -207,6 +226,8 @@ fn show_info(plugin_id: &str) -> Result<()> {
 
     match plugin {
         Some(p) => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
             println!("Name:        {}", p.name);
             println!("Marketplace: {}", p.marketplace);
             println!("ID:          {}", p.id);
@@ -229,7 +250,41 @@ fn show_info(plugin_id: &str) -> Result<()> {
             println!("Installed:   {}", installed);
             println!("Enabled in:  {}", p.enabled_context());
 
-            // Show project path for project/local scope plugins
+            // Per-scope settings breakdown — mirrors the TUI details pane.
+            // Project/Local rows are annotated with the source file path when set.
+            println!("Settings:");
+            println!("  User:    {}", format_setting_text(p.enabled_user));
+            println!(
+                "{}",
+                format_settings_row(
+                    "Project",
+                    p.enabled_project,
+                    p.project_settings_source_display(Scope::Project, &cwd),
+                )
+            );
+            println!(
+                "{}",
+                format_settings_row(
+                    "Local",
+                    p.enabled_local,
+                    p.project_settings_source_display(Scope::Local, &cwd),
+                )
+            );
+
+            let effective_label = match p.effective_scope() {
+                Some(scope) => format!(
+                    "Effective:   {} ({})",
+                    if p.is_enabled() {
+                        "ENABLED"
+                    } else {
+                        "DISABLED"
+                    },
+                    scope
+                ),
+                None => "Effective:   DISABLED (no settings)".to_string(),
+            };
+            println!("{}", effective_label);
+
             if p.install_scope != Scope::User {
                 if let Some(path_display) = p.project_path_display() {
                     println!("Project:     {}", path_display);
