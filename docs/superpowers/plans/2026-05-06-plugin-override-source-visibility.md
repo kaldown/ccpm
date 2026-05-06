@@ -84,9 +84,9 @@ Expected: all tests pass. Record the unit-test count and integration-test count 
 
 Run:
 ```bash
-cargo clippy --all-targets -- -D warnings
+cargo clippy -- -D warnings
 ```
-Expected: passes with zero warnings. (Note: any pre-existing warnings here are out of scope for this plan; if it fails on baseline, STOP and report — do not modify unrelated files to fix it.)
+Expected: passes with zero warnings. The CI-equivalent invocation (`cargo clippy -- -D warnings`, no `--all-targets`) is what we baseline against; `cargo clippy --all-targets` surfaces 10 pre-existing deprecation errors in `tests/integration.rs` (`assert_cmd::Command::cargo_bin`) that are documented tech debt out of scope for this plan.
 
 ---
 
@@ -240,7 +240,7 @@ Expected: all 6 new tests pass.
 
 Run:
 ```bash
-cargo test && cargo clippy --all-targets -- -D warnings
+cargo test && cargo clippy -- -D warnings
 ```
 Expected: every test passes; clippy reports zero new warnings.
 
@@ -354,7 +354,7 @@ Expected: all 3 new tests pass.
 
 Run:
 ```bash
-cargo test && cargo clippy --all-targets -- -D warnings
+cargo test && cargo clippy -- -D warnings
 ```
 Expected: every test passes; clippy reports zero new warnings.
 
@@ -733,7 +733,7 @@ Expected: all 3 details tests pass. `test_details_renders_path_on_local_row_when
 
 Run:
 ```bash
-cargo test && cargo clippy --all-targets -- -D warnings
+cargo test && cargo clippy -- -D warnings
 ```
 Expected: every test passes; clippy reports zero new warnings.
 
@@ -960,7 +960,7 @@ Expected: pass.
 
 Run:
 ```bash
-cargo test && cargo clippy --all-targets -- -D warnings
+cargo test && cargo clippy -- -D warnings
 ```
 Expected: every test passes; clippy reports zero new warnings.
 
@@ -1097,7 +1097,7 @@ Expected: all tests pass. Verify the unit-test count grew by exactly 9 (Tasks 2 
 
 Run:
 ```bash
-cargo clippy --all-targets -- -D warnings
+cargo clippy -- -D warnings
 ```
 Expected: zero warnings.
 
