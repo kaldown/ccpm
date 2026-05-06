@@ -199,6 +199,18 @@ impl Plugin {
         }
     }
 
+    /// Returns the project path formatted relative to home directory
+    pub fn project_path_display(&self) -> Option<String> {
+        self.project_path.as_ref().map(|p| {
+            if let Some(home) = dirs::home_dir() {
+                if let Ok(relative) = p.strip_prefix(&home) {
+                    return format!("~/{}", relative.display());
+                }
+            }
+            p.display().to_string()
+        })
+    }
+
     /// Path to the settings file that supplies this plugin's flag at the given scope.
     ///
     /// Returns `None` if no flag exists at the requested scope, or for `Scope::User`
@@ -225,18 +237,6 @@ impl Plugin {
             Scope::User => unreachable!(),
         };
         Some(project_dir.join(".claude").join(file_name))
-    }
-
-    /// Returns the project path formatted relative to home directory
-    pub fn project_path_display(&self) -> Option<String> {
-        self.project_path.as_ref().map(|p| {
-            if let Some(home) = dirs::home_dir() {
-                if let Ok(relative) = p.strip_prefix(&home) {
-                    return format!("~/{}", relative.display());
-                }
-            }
-            p.display().to_string()
-        })
     }
 }
 
@@ -596,6 +596,14 @@ mod tests {
         let cwd = PathBuf::from("/cwd");
         assert_eq!(plugin.project_settings_source(Scope::Project, &cwd), None);
         assert_eq!(plugin.project_settings_source(Scope::Local, &cwd), None);
+
+        let mut user_plugin = make_test_plugin();
+        user_plugin.enabled_user = Some(true);
+        assert_eq!(
+            user_plugin.project_settings_source(Scope::User, &cwd),
+            None,
+            "Scope::User must always return None even when enabled_user is set"
+        );
     }
 
     #[test]
