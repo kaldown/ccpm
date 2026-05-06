@@ -256,7 +256,10 @@ mod tests {
         let row = settings_row(&lines, "Local:");
         let text = line_text(row);
 
-        assert!(text.contains(" · "), "Local row missing source separator: {text}");
+        assert!(
+            text.contains(" · "),
+            "Local row missing source separator: {text}"
+        );
         assert!(
             text.contains("settings.local.json"),
             "Local row missing source file path: {text}"
@@ -289,9 +292,6 @@ mod tests {
         let row = settings_row(&lines, "User:");
         let text = line_text(row);
 
-        assert!(
-            !text.contains(" · "),
-            "User row is never annotated: {text}"
-        );
+        assert!(!text.contains(" · "), "User row is never annotated: {text}");
     }
 }

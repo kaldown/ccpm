@@ -241,11 +241,7 @@ impl Plugin {
 
     /// Display-formatted source path with home-relative substitution (`~/...`).
     /// Returns `None` whenever `project_settings_source` would return `None`.
-    pub fn project_settings_source_display(
-        &self,
-        scope: Scope,
-        cwd: &Path,
-    ) -> Option<String> {
+    pub fn project_settings_source_display(&self, scope: Scope, cwd: &Path) -> Option<String> {
         self.project_settings_source(scope, cwd).map(|p| {
             if let Some(home) = dirs::home_dir() {
                 if let Ok(rel) = p.strip_prefix(&home) {
