@@ -7,7 +7,7 @@ pub use discovery::*;
 pub use operations::*;
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -197,6 +197,34 @@ impl Plugin {
             Scope::Project => self.enabled_user.is_some() || self.enabled_local.is_some(),
             Scope::Local => self.enabled_user.is_some() || self.enabled_project.is_some(),
         }
+    }
+
+    /// Path to the settings file that supplies this plugin's flag at the given scope.
+    ///
+    /// Returns `None` if no flag exists at the requested scope, or for `Scope::User`
+    /// (the user-scope flag always lives in `~/.claude/settings.json` — not annotated
+    /// by callers because that path carries no useful diagnostic information).
+    ///
+    /// For project/local-scope installs the project directory is `self.project_path`.
+    /// For user-scope installs with a CWD override (project_path is None) the project
+    /// directory falls back to `cwd`.
+    pub fn project_settings_source(&self, scope: Scope, cwd: &Path) -> Option<PathBuf> {
+        let has_value = match scope {
+            Scope::User => return None,
+            Scope::Project => self.enabled_project.is_some(),
+            Scope::Local => self.enabled_local.is_some(),
+        };
+        if !has_value {
+            return None;
+        }
+
+        let project_dir = self.project_path.as_deref().unwrap_or(cwd);
+        let file_name = match scope {
+            Scope::Project => "settings.json",
+            Scope::Local => "settings.local.json",
+            Scope::User => unreachable!(),
+        };
+        Some(project_dir.join(".claude").join(file_name))
     }
 
     /// Returns the project path formatted relative to home directory
@@ -524,5 +552,77 @@ mod tests {
                 Some("~/projects/myapp".to_string())
             );
         }
+    }
+
+    #[test]
+    fn test_project_settings_source_local_install_with_project_path() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::Local;
+        plugin.project_path = Some(PathBuf::from("/proj"));
+        plugin.enabled_local = Some(true);
+
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source(Scope::Local, &cwd),
+            Some(PathBuf::from("/proj/.claude/settings.local.json"))
+        );
+    }
+
+    #[test]
+    fn test_project_settings_source_user_install_with_cwd_override() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::User;
+        plugin.project_path = None;
+        plugin.enabled_local = Some(false);
+
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source(Scope::Local, &cwd),
+            Some(PathBuf::from("/cwd/.claude/settings.local.json"))
+        );
+    }
+
+    #[test]
+    fn test_project_settings_source_user_scope_returns_none() {
+        let mut plugin = make_test_plugin();
+        plugin.enabled_user = Some(true);
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(plugin.project_settings_source(Scope::User, &cwd), None);
+    }
+
+    #[test]
+    fn test_project_settings_source_no_value_returns_none() {
+        let plugin = make_test_plugin(); // all enabled_* are None
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(plugin.project_settings_source(Scope::Project, &cwd), None);
+        assert_eq!(plugin.project_settings_source(Scope::Local, &cwd), None);
+    }
+
+    #[test]
+    fn test_project_settings_source_project_scope_uses_settings_json() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::Project;
+        plugin.project_path = Some(PathBuf::from("/proj"));
+        plugin.enabled_project = Some(true);
+
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source(Scope::Project, &cwd),
+            Some(PathBuf::from("/proj/.claude/settings.json"))
+        );
+    }
+
+    #[test]
+    fn test_project_settings_source_local_install_without_project_path_falls_back_to_cwd() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::Local;
+        plugin.project_path = None; // legacy data pre-projectPath fix
+        plugin.enabled_local = Some(true);
+
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source(Scope::Local, &cwd),
+            Some(PathBuf::from("/cwd/.claude/settings.local.json"))
+        );
     }
 }
