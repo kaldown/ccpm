@@ -43,6 +43,7 @@ This project maintains structured documentation. **Read the appropriate files ba
    - Update `CLAUDE.md` - remove from in-progress, add to completed if relevant
    - Update `CLAUDE.local.md` - add implementation details
    - Update `docs/architecture.md` - if new components/patterns added
+   - **Bump `Cargo.toml` version** - patch-level (`0.x.y` → `0.x.(y+1)`) for typical additive features; minor for visible behavior changes that warrant a release marker; major for breaking changes. The bump goes in the same commit as the docs sweep so the version always tracks completed features.
 
 3. **User-facing changes**:
    - Update `README.md` - only significant user-visible changes

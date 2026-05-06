@@ -1,6 +1,6 @@
 [package]
 name = "ccpm"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["CCPM Contributors"]
 description = "Claude Code Plugin Manager - A TUI for managing Claude Code plugins"
