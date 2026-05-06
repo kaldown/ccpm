@@ -218,6 +218,7 @@ Settings precedence: Local > Project > User
 - `[overrides: N]` count in header when overrides exist in the current view
 - Project path shown for all project/local scope plugins
 - Details pane shows per-scope Settings block (User/Project/Local breakdown + Effective line)
+- **Override source file path** shown on Project/Local rows of the Settings block (e.g. `Local: enabled  · ~/Projects/tern/Ternv3/.claude/settings.local.json`) — same suffix appears in `ccpm info` output
 
 ### Config Files Read
 

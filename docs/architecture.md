@@ -309,6 +309,8 @@ App
     └── DetailModal (i key - expanded plugin info)
 ```
 
+**Override source visibility.** The Settings block in the details pane displays the source file path for any Project or Local override on the selected plugin. The path is derived at render time by `Plugin::project_settings_source_display(scope, cwd)` — for project/local-scope installs from `plugin.project_path`; for user-scope installs with a CWD override, from the current working directory. The User row is never annotated because its source is always `~/.claude/settings.json`. The CLI's `ccpm info` command renders the same suffix in plain text for parity.
+
 ### File Operations
 
 - All writes use atomic operations (write to temp, rename)

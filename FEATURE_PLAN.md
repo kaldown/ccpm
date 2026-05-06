@@ -251,6 +251,18 @@ Provide interface to control plugin installation and deletion from plugin manage
 
 ## Completed Features
 
+### Plugin Override-Source Visibility (2026-05-06)
+
+The TUI details pane and `ccpm info` CLI output now show the source file path for each per-scope override flag. A user-installed plugin pinned by another project's `settings.local.json` is identifiable at a glance — the Local row of the Settings block carries `· <path-to-settings-file>`.
+
+**Implementation:** new `Plugin::project_settings_source` + `project_settings_source_display` helpers; `render_details` extracted to a pure `build_details_lines(plugin, cwd)` builder; `show_info` gained a Settings/Effective block to match the TUI.
+
+**Spec:** `docs/superpowers/specs/2026-05-06-plugin-override-source-visibility-design.md`
+
+**Plan:** `docs/superpowers/plans/2026-05-06-plugin-override-source-visibility.md`
+
+---
+
 ### Stable JSON Output (2026-05-05)
 
 CCPM-authored settings files now serialize with a deterministic alphabetical key order at every level, plus a trailing newline. Plugin toggles produce minimal diffs; files look identical across projects. `enabledPlugins` lands first (named struct field), then everything else alphabetical, with arrays preserving meaningful order.
