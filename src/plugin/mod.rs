@@ -211,23 +211,6 @@ impl Plugin {
         })
     }
 
-    /// Display-formatted source path with home-relative substitution (`~/...`).
-    /// Returns `None` whenever `project_settings_source` would return `None`.
-    pub fn project_settings_source_display(
-        &self,
-        scope: Scope,
-        cwd: &Path,
-    ) -> Option<String> {
-        self.project_settings_source(scope, cwd).map(|p| {
-            if let Some(home) = dirs::home_dir() {
-                if let Ok(rel) = p.strip_prefix(&home) {
-                    return format!("~/{}", rel.display());
-                }
-            }
-            p.display().to_string()
-        })
-    }
-
     /// Path to the settings file that supplies this plugin's flag at the given scope.
     ///
     /// Returns `None` if no flag exists at the requested scope, or for `Scope::User`
@@ -254,6 +237,23 @@ impl Plugin {
             Scope::User => unreachable!(),
         };
         Some(project_dir.join(".claude").join(file_name))
+    }
+
+    /// Display-formatted source path with home-relative substitution (`~/...`).
+    /// Returns `None` whenever `project_settings_source` would return `None`.
+    pub fn project_settings_source_display(
+        &self,
+        scope: Scope,
+        cwd: &Path,
+    ) -> Option<String> {
+        self.project_settings_source(scope, cwd).map(|p| {
+            if let Some(home) = dirs::home_dir() {
+                if let Ok(rel) = p.strip_prefix(&home) {
+                    return format!("~/{}", rel.display());
+                }
+            }
+            p.display().to_string()
+        })
     }
 }
 
