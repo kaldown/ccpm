@@ -211,6 +211,23 @@ impl Plugin {
         })
     }
 
+    /// Display-formatted source path with home-relative substitution (`~/...`).
+    /// Returns `None` whenever `project_settings_source` would return `None`.
+    pub fn project_settings_source_display(
+        &self,
+        scope: Scope,
+        cwd: &Path,
+    ) -> Option<String> {
+        self.project_settings_source(scope, cwd).map(|p| {
+            if let Some(home) = dirs::home_dir() {
+                if let Ok(rel) = p.strip_prefix(&home) {
+                    return format!("~/{}", rel.display());
+                }
+            }
+            p.display().to_string()
+        })
+    }
+
     /// Path to the settings file that supplies this plugin's flag at the given scope.
     ///
     /// Returns `None` if no flag exists at the requested scope, or for `Scope::User`
@@ -631,6 +648,50 @@ mod tests {
         assert_eq!(
             plugin.project_settings_source(Scope::Local, &cwd),
             Some(PathBuf::from("/cwd/.claude/settings.local.json"))
+        );
+    }
+
+    #[test]
+    fn test_project_settings_source_display_returns_some_path_string() {
+        let mut plugin = make_test_plugin();
+        plugin.install_scope = Scope::Local;
+        plugin.project_path = Some(PathBuf::from("/some/absolute/proj"));
+        plugin.enabled_local = Some(true);
+
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source_display(Scope::Local, &cwd),
+            Some("/some/absolute/proj/.claude/settings.local.json".to_string())
+        );
+    }
+
+    #[test]
+    fn test_project_settings_source_display_uses_home_relative_format() {
+        if let Some(home) = dirs::home_dir() {
+            let mut plugin = make_test_plugin();
+            plugin.install_scope = Scope::Local;
+            plugin.project_path = Some(home.join("Projects/myapp"));
+            plugin.enabled_local = Some(true);
+
+            let cwd = PathBuf::from("/cwd");
+            assert_eq!(
+                plugin.project_settings_source_display(Scope::Local, &cwd),
+                Some("~/Projects/myapp/.claude/settings.local.json".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn test_project_settings_source_display_returns_none_when_source_none() {
+        let plugin = make_test_plugin(); // no values set
+        let cwd = PathBuf::from("/cwd");
+        assert_eq!(
+            plugin.project_settings_source_display(Scope::Local, &cwd),
+            None
+        );
+        assert_eq!(
+            plugin.project_settings_source_display(Scope::User, &cwd),
+            None
         );
     }
 }
